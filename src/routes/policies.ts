@@ -1,11 +1,13 @@
 import { Router } from "express";
 import { createPolicy, getAgentById, listPolicies } from "../db";
+import { validate } from "../middleware/validate";
 import { addAuditEvent } from "../services/audit";
 import { Effect, Environment } from "../types";
+import { createPolicySchema, listPoliciesQuerySchema } from "../validation/schemas";
 
 export const policiesRouter = Router();
 
-policiesRouter.get("/policies", async (req, res) => {
+policiesRouter.get("/policies", validate({ query: listPoliciesQuerySchema }), async (req, res) => {
   const tenantId = typeof req.query.tenantId === "string" ? req.query.tenantId : undefined;
   const agentId = typeof req.query.agentId === "string" ? req.query.agentId : undefined;
 
@@ -16,28 +18,15 @@ policiesRouter.get("/policies", async (req, res) => {
   });
 });
 
-policiesRouter.post("/policies", async (req, res) => {
+policiesRouter.post("/policies", validate({ body: createPolicySchema }), async (req, res) => {
   const body = req.body as {
-    tenantId?: string;
-    agentId?: string;
-    connector?: string;
-    actions?: string[];
-    environment?: Environment;
-    effect?: Effect;
+    tenantId: string;
+    agentId: string;
+    connector: string;
+    actions: string[];
+    environment: Environment;
+    effect: Effect;
   };
-
-  if (
-    !body.tenantId ||
-    !body.agentId ||
-    !body.connector ||
-    !Array.isArray(body.actions) ||
-    body.actions.length === 0 ||
-    !body.environment ||
-    !body.effect
-  ) {
-    res.status(400).json({ error: "tenantId, agentId, connector, actions, environment, effect are required" });
-    return;
-  }
 
   const agent = await getAgentById(body.agentId);
   if (!agent || agent.tenantId !== body.tenantId) {

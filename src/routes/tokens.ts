@@ -1,9 +1,12 @@
 import { Router } from "express";
 import { TOKEN_TTL_SECONDS } from "../config";
 import { getAgentById } from "../db";
+import { AppError } from "../errors";
+import { validate } from "../middleware/validate";
 import { addAuditEvent } from "../services/audit";
 import { createToken } from "../services/token";
 import { Environment, TokenClaims } from "../types";
+import { mintTokenSchema } from "../validation/schemas";
 
 function isEnvironment(value: string): value is Environment {
   return value === "dev" || value === "staging" || value === "prod";
@@ -11,18 +14,16 @@ function isEnvironment(value: string): value is Environment {
 
 export const tokensRouter = Router();
 
-tokensRouter.post("/tokens/mint", async (req, res) => {
-  const body = req.body as { tenantId?: string; agentId?: string };
+tokensRouter.post("/tokens/mint", validate({ body: mintTokenSchema }), async (req, res) => {
+  const body = req.body as { tenantId: string; agentId: string };
   const agent = body.agentId ? await getAgentById(body.agentId) : undefined;
 
-  if (!body.tenantId || !body.agentId || !agent || agent.tenantId !== body.tenantId) {
-    res.status(400).json({ error: "valid tenantId and agentId are required" });
-    return;
+  if (!agent || agent.tenantId !== body.tenantId) {
+    throw new AppError(400, "INVALID_AGENT", "valid tenantId and agentId are required");
   }
 
   if (!isEnvironment(agent.environment)) {
-    res.status(500).json({ error: "Agent has invalid environment" });
-    return;
+    throw new AppError(500, "INVALID_AGENT_ENV", "Agent has invalid environment");
   }
 
   const iat = Math.floor(Date.now() / 1000);

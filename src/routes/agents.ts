@@ -1,17 +1,14 @@
 import { Router } from "express";
 import { createAgent } from "../db";
+import { validate } from "../middleware/validate";
 import { addAuditEvent } from "../services/audit";
 import { Environment } from "../types";
+import { createAgentSchema } from "../validation/schemas";
 
 export const agentsRouter = Router();
 
-agentsRouter.post("/agents", async (req, res) => {
-  const body = req.body as { tenantId?: string; name?: string; environment?: Environment };
-
-  if (!body.tenantId || !body.name) {
-    res.status(400).json({ error: "tenantId and name are required" });
-    return;
-  }
+agentsRouter.post("/agents", validate({ body: createAgentSchema }), async (req, res) => {
+  const body = req.body as { tenantId: string; name: string; environment?: Environment };
 
   const agent = await createAgent({
     tenantId: body.tenantId,

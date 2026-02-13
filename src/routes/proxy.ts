@@ -1,31 +1,32 @@
 import { Request, Router } from "express";
+import { AppError } from "../errors";
+import { validate } from "../middleware/validate";
 import { addAuditEvent } from "../services/audit";
 import { consumeApproval, createApprovalRequest, getUsableApproval } from "../services/approvals";
 import { authorize } from "../services/authorize";
 import { executeConnectorAction, isSupportedConnector } from "../services/connectors";
 import { parseBearerToken, verifyToken } from "../services/token";
 import { Environment } from "../types";
+import { proxyBodySchema, proxyParamsSchema } from "../validation/schemas";
 
 export const proxyRouter = Router();
 
 proxyRouter.post<{ connector: string; action: string }>(
   "/proxy/:connector/:action",
+  validate({ params: proxyParamsSchema, body: proxyBodySchema }),
   async (req: Request<{ connector: string; action: string }>, res) => {
     const token = parseBearerToken(req);
     if (!token) {
-      res.status(401).json({ error: "Bearer token required" });
-      return;
+      throw new AppError(401, "MISSING_BEARER_TOKEN", "Bearer token required");
     }
 
     const claims = verifyToken(token);
     if (!claims) {
-      res.status(401).json({ error: "Invalid or expired token" });
-      return;
+      throw new AppError(401, "INVALID_TOKEN", "Invalid or expired token");
     }
 
     if (!isSupportedConnector(req.params.connector)) {
-      res.status(400).json({ error: "Unsupported connector" });
-      return;
+      throw new AppError(400, "UNSUPPORTED_CONNECTOR", "Unsupported connector");
     }
 
     const body = req.body as {

@@ -1,19 +1,16 @@
 import { Router } from "express";
+import { validate } from "../middleware/validate";
 import { addAuditEvent } from "../services/audit";
 import { authorize } from "../services/authorize";
 import { AuthorizeInput } from "../types";
+import { authorizeSchema } from "../validation/schemas";
 
 export const authorizeRouter = Router();
 
-authorizeRouter.post("/authorize", async (req, res) => {
-  const body = req.body as Partial<AuthorizeInput>;
+authorizeRouter.post("/authorize", validate({ body: authorizeSchema }), async (req, res) => {
+  const body = req.body as AuthorizeInput;
 
-  if (!body.tenantId || !body.agentId || !body.connector || !body.action || !body.environment) {
-    res.status(400).json({ error: "tenantId, agentId, connector, action, environment are required" });
-    return;
-  }
-
-  const decision = await authorize(body as AuthorizeInput);
+  const decision = await authorize(body);
   await addAuditEvent({
     tenantId: body.tenantId,
     agentId: body.agentId,

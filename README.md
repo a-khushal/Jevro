@@ -4,6 +4,12 @@ Express + TypeScript MVP for agent identity, policy enforcement, approvals, and 
 
 ## Run
 
+Create env file first:
+
+```bash
+cp .env.example .env
+```
+
 ```bash
 npm install
 npm run prisma:generate
@@ -26,6 +32,10 @@ Default server: `http://localhost:8080`
 - `PORT` (default: `8080`)
 - `TOKEN_SECRET` (default: `local-dev-secret-change-me`)
 - `TOKEN_TTL_SECONDS` (default: `600`)
+- `CORS_ORIGINS` (default: `http://localhost:3000,http://localhost:5173`)
+- `JSON_BODY_LIMIT` (default: `100kb`)
+- `RATE_LIMIT_WINDOW_MS` (default: `60000`)
+- `RATE_LIMIT_MAX_REQUESTS` (default: `120`)
 
 ## API flow
 

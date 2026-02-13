@@ -1,12 +1,15 @@
-import { Router } from "express";
+import { Request, Router } from "express";
 import { listApprovals } from "../db";
+import { AppError } from "../errors";
+import { validate } from "../middleware/validate";
 import { addAuditEvent } from "../services/audit";
 import { resolveApproval } from "../services/approvals";
 import { ApprovalStatus } from "../types";
+import { approvalDecisionBodySchema, approvalDecisionParamsSchema, listApprovalsQuerySchema } from "../validation/schemas";
 
 export const approvalsRouter = Router();
 
-approvalsRouter.get("/approvals", async (req, res) => {
+approvalsRouter.get("/approvals", validate({ query: listApprovalsQuerySchema }), async (req, res) => {
   const tenantId = typeof req.query.tenantId === "string" ? req.query.tenantId : undefined;
   const agentId = typeof req.query.agentId === "string" ? req.query.agentId : undefined;
   const status = typeof req.query.status === "string" ? (req.query.status as ApprovalStatus) : undefined;
@@ -24,18 +27,11 @@ approvalsRouter.get("/approvals", async (req, res) => {
   });
 });
 
-approvalsRouter.post("/approvals/:approvalId/decision", async (req, res) => {
-  const body = req.body as { approverId?: string; decision?: "approved" | "rejected" };
-
-  if (!body.approverId || !body.decision) {
-    res.status(400).json({ error: "approverId and decision are required" });
-    return;
-  }
-
-  if (body.decision !== "approved" && body.decision !== "rejected") {
-    res.status(400).json({ error: "decision must be approved or rejected" });
-    return;
-  }
+approvalsRouter.post(
+  "/approvals/:approvalId/decision",
+  validate({ params: approvalDecisionParamsSchema, body: approvalDecisionBodySchema }),
+  async (req: Request<{ approvalId: string }>, res) => {
+    const body = req.body as { approverId: string; decision: "approved" | "rejected" };
 
   const approval = await resolveApproval({
     approvalId: req.params.approvalId,
@@ -43,20 +39,20 @@ approvalsRouter.post("/approvals/:approvalId/decision", async (req, res) => {
     status: body.decision
   });
 
-  if (!approval) {
-    res.status(404).json({ error: "pending approval not found" });
-    return;
+    if (!approval) {
+      throw new AppError(404, "APPROVAL_NOT_FOUND", "pending approval not found");
+    }
+
+    await addAuditEvent({
+      tenantId: approval.tenantId,
+      agentId: approval.agentId,
+      eventType: "approval.resolved",
+      connector: approval.connector,
+      action: approval.action,
+      status: body.decision === "approved" ? "success" : "failure",
+      details: { approvalId: approval.id, approverId: body.approverId, decision: body.decision }
+    });
+
+    res.status(200).json({ approval });
   }
-
-  await addAuditEvent({
-    tenantId: approval.tenantId,
-    agentId: approval.agentId,
-    eventType: "approval.resolved",
-    connector: approval.connector,
-    action: approval.action,
-    status: body.decision === "approved" ? "success" : "failure",
-    details: { approvalId: approval.id, approverId: body.approverId, decision: body.decision }
-  });
-
-  res.status(200).json({ approval });
-});
+);
