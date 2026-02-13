@@ -36,6 +36,9 @@ Default server: `http://localhost:8080`
 - `JSON_BODY_LIMIT` (default: `100kb`)
 - `RATE_LIMIT_WINDOW_MS` (default: `60000`)
 - `RATE_LIMIT_MAX_REQUESTS` (default: `120`)
+- `SLACK_BOT_TOKEN` (required for approval notifications)
+- `SLACK_SIGNING_SECRET` (required for Slack callbacks)
+- `SLACK_APPROVAL_CHANNEL` (required for approval notifications)
 
 ## API flow
 
@@ -75,6 +78,10 @@ curl -s -X POST http://localhost:8080/proxy/github/read_pr \
 ## Approval flow
 
 When policy decision is `require_approval`, proxy returns `202` with `approval.id`.
+
+For production approval flow, configure your Slack app interactivity request URL to:
+
+- `POST /integrations/slack/interactivity`
 
 1) Resolve approval
 

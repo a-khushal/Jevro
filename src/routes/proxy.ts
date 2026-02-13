@@ -5,6 +5,7 @@ import { addAuditEvent } from "../services/audit";
 import { consumeApproval, createApprovalRequest, getUsableApproval } from "../services/approvals";
 import { authorize } from "../services/authorize";
 import { executeConnectorAction, isSupportedConnector } from "../services/connectors";
+import { sendSlackApprovalRequest } from "../services/slack";
 import { parseBearerToken, verifyToken } from "../services/token";
 import { Environment } from "../types";
 import { proxyBodySchema, proxyParamsSchema } from "../validation/schemas";
@@ -108,6 +109,14 @@ proxyRouter.post<{ connector: string; action: string }>(
         action: req.params.action
       });
 
+      const slackMessage = await sendSlackApprovalRequest({
+        tenantId: claims.tenantId,
+        agentId: claims.sub,
+        connector: req.params.connector,
+        action: req.params.action,
+        approvalId: approval.id
+      });
+
       await addAuditEvent({
         tenantId: claims.tenantId,
         agentId: claims.sub,
@@ -117,6 +126,22 @@ proxyRouter.post<{ connector: string; action: string }>(
         status: "success",
         details: { decision, approvalId: approval.id, approvalChannel: "slack", approvalStatus: "pending" }
       });
+
+      await addAuditEvent({
+        tenantId: claims.tenantId,
+        agentId: claims.sub,
+        eventType: "approval.notified",
+        connector: req.params.connector,
+        action: req.params.action,
+        status: "success",
+        details: {
+          approvalId: approval.id,
+          provider: "slack",
+          channel: slackMessage.channel,
+          messageTs: slackMessage.ts
+        }
+      });
+
       res.status(202).json({
         decision,
         message: "Approval required. Resolve approval then replay request with approvalId.",

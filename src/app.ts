@@ -11,6 +11,7 @@ import { authorizeRouter } from "./routes/authorize";
 import { healthRouter } from "./routes/health";
 import { policiesRouter } from "./routes/policies";
 import { proxyRouter } from "./routes/proxy";
+import { slackRouter } from "./routes/slack";
 import { tokensRouter } from "./routes/tokens";
 
 export const app = express();
@@ -50,6 +51,7 @@ app.use(authorizeRouter);
 app.use(proxyRouter);
 app.use(auditRouter);
 app.use(approvalsRouter);
+app.use(slackRouter);
 
 app.use(notFoundHandler);
 app.use(errorHandler);

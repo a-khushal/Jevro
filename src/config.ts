@@ -10,7 +10,10 @@ const envSchema = z.object({
   CORS_ORIGINS: z.string().default("http://localhost:3000,http://localhost:5173"),
   JSON_BODY_LIMIT: z.string().default("100kb"),
   RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().default(60000),
-  RATE_LIMIT_MAX_REQUESTS: z.coerce.number().int().positive().default(120)
+  RATE_LIMIT_MAX_REQUESTS: z.coerce.number().int().positive().default(120),
+  SLACK_BOT_TOKEN: z.string().optional(),
+  SLACK_SIGNING_SECRET: z.string().optional(),
+  SLACK_APPROVAL_CHANNEL: z.string().optional()
 });
 
 const parsed = envSchema.safeParse(process.env);
@@ -28,3 +31,6 @@ export const JSON_BODY_LIMIT = env.JSON_BODY_LIMIT;
 export const RATE_LIMIT_WINDOW_MS = env.RATE_LIMIT_WINDOW_MS;
 export const RATE_LIMIT_MAX_REQUESTS = env.RATE_LIMIT_MAX_REQUESTS;
 export const CORS_ORIGINS = env.CORS_ORIGINS.split(",").map((value) => value.trim()).filter(Boolean);
+export const SLACK_BOT_TOKEN = env.SLACK_BOT_TOKEN;
+export const SLACK_SIGNING_SECRET = env.SLACK_SIGNING_SECRET;
+export const SLACK_APPROVAL_CHANNEL = env.SLACK_APPROVAL_CHANNEL;
