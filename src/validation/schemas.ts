@@ -68,3 +68,8 @@ export const approvalDecisionBodySchema = z.object({
   approverId: z.string().min(1),
   decision: z.enum(["approved", "rejected"])
 });
+
+export const upsertGithubCredentialSchema = z.object({
+  tenantId: z.string().min(1),
+  token: z.string().min(10)
+});

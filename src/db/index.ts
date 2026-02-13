@@ -164,3 +164,37 @@ export async function consumeApproval(approvalId: string) {
     }
   });
 }
+
+export async function upsertConnectorCredential(input: {
+  tenantId: string;
+  connector: string;
+  token: string;
+}) {
+  return prisma.connectorCredential.upsert({
+    where: {
+      tenantId_connector: {
+        tenantId: input.tenantId,
+        connector: input.connector
+      }
+    },
+    create: {
+      tenantId: input.tenantId,
+      connector: input.connector,
+      token: input.token
+    },
+    update: {
+      token: input.token
+    }
+  });
+}
+
+export async function getConnectorCredential(input: { tenantId: string; connector: string }) {
+  return prisma.connectorCredential.findUnique({
+    where: {
+      tenantId_connector: {
+        tenantId: input.tenantId,
+        connector: input.connector
+      }
+    }
+  });
+}

@@ -81,11 +81,30 @@ proxyRouter.post<{ connector: string; action: string }>(
             details: { approvalId: approved.id }
           });
 
-          const providerResponse = executeConnectorAction({
-            connector: req.params.connector,
-            action: req.params.action,
-            payload: body.payload ?? {}
-          });
+          let providerResponse: Record<string, unknown>;
+          try {
+            providerResponse = await executeConnectorAction({
+              tenantId: claims.tenantId,
+              connector: req.params.connector,
+              action: req.params.action,
+              payload: body.payload ?? {}
+            });
+          } catch (error: unknown) {
+            await addAuditEvent({
+              tenantId: claims.tenantId,
+              agentId: claims.sub,
+              eventType: "proxy.request",
+              connector: req.params.connector,
+              action: req.params.action,
+              status: "failure",
+              details: {
+                decision: "allow_via_approval",
+                error: error instanceof Error ? error.message : "Connector execution failed"
+              }
+            });
+
+            throw error;
+          }
 
           await addAuditEvent({
             tenantId: claims.tenantId,
@@ -150,11 +169,30 @@ proxyRouter.post<{ connector: string; action: string }>(
       return;
     }
 
-    const providerResponse = executeConnectorAction({
-      connector: req.params.connector,
-      action: req.params.action,
-      payload: body.payload ?? {}
-    });
+    let providerResponse: Record<string, unknown>;
+    try {
+      providerResponse = await executeConnectorAction({
+        tenantId: claims.tenantId,
+        connector: req.params.connector,
+        action: req.params.action,
+        payload: body.payload ?? {}
+      });
+    } catch (error: unknown) {
+      await addAuditEvent({
+        tenantId: claims.tenantId,
+        agentId: claims.sub,
+        eventType: "proxy.request",
+        connector: req.params.connector,
+        action: req.params.action,
+        status: "failure",
+        details: {
+          decision: "allow",
+          error: error instanceof Error ? error.message : "Connector execution failed"
+        }
+      });
+
+      throw error;
+    }
 
     await addAuditEvent({
       tenantId: claims.tenantId,

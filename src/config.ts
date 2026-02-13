@@ -11,6 +11,12 @@ const envSchema = z.object({
   JSON_BODY_LIMIT: z.string().default("100kb"),
   RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().default(60000),
   RATE_LIMIT_MAX_REQUESTS: z.coerce.number().int().positive().default(120),
+  CONNECTOR_TIMEOUT_MS: z.coerce.number().int().positive().default(5000),
+  CONNECTOR_RETRY_COUNT: z.coerce.number().int().min(0).default(2),
+  CONNECTOR_RETRY_BACKOFF_MS: z.coerce.number().int().positive().default(250),
+  CIRCUIT_BREAKER_FAILURE_THRESHOLD: z.coerce.number().int().positive().default(5),
+  CIRCUIT_BREAKER_OPEN_MS: z.coerce.number().int().positive().default(30000),
+  GITHUB_API_BASE_URL: z.string().url().default("https://api.github.com"),
   SLACK_BOT_TOKEN: z.string().optional(),
   SLACK_SIGNING_SECRET: z.string().optional(),
   SLACK_APPROVAL_CHANNEL: z.string().optional()
@@ -30,6 +36,12 @@ export const TOKEN_TTL_SECONDS = env.TOKEN_TTL_SECONDS;
 export const JSON_BODY_LIMIT = env.JSON_BODY_LIMIT;
 export const RATE_LIMIT_WINDOW_MS = env.RATE_LIMIT_WINDOW_MS;
 export const RATE_LIMIT_MAX_REQUESTS = env.RATE_LIMIT_MAX_REQUESTS;
+export const CONNECTOR_TIMEOUT_MS = env.CONNECTOR_TIMEOUT_MS;
+export const CONNECTOR_RETRY_COUNT = env.CONNECTOR_RETRY_COUNT;
+export const CONNECTOR_RETRY_BACKOFF_MS = env.CONNECTOR_RETRY_BACKOFF_MS;
+export const CIRCUIT_BREAKER_FAILURE_THRESHOLD = env.CIRCUIT_BREAKER_FAILURE_THRESHOLD;
+export const CIRCUIT_BREAKER_OPEN_MS = env.CIRCUIT_BREAKER_OPEN_MS;
+export const GITHUB_API_BASE_URL = env.GITHUB_API_BASE_URL;
 export const CORS_ORIGINS = env.CORS_ORIGINS.split(",").map((value) => value.trim()).filter(Boolean);
 export const SLACK_BOT_TOKEN = env.SLACK_BOT_TOKEN;
 export const SLACK_SIGNING_SECRET = env.SLACK_SIGNING_SECRET;

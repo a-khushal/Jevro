@@ -8,6 +8,7 @@ import { agentsRouter } from "./routes/agents";
 import { approvalsRouter } from "./routes/approvals";
 import { auditRouter } from "./routes/audit";
 import { authorizeRouter } from "./routes/authorize";
+import { connectorsRouter } from "./routes/connectors";
 import { healthRouter } from "./routes/health";
 import { policiesRouter } from "./routes/policies";
 import { proxyRouter } from "./routes/proxy";
@@ -52,6 +53,7 @@ app.use(proxyRouter);
 app.use(auditRouter);
 app.use(approvalsRouter);
 app.use(slackRouter);
+app.use(connectorsRouter);
 
 app.use(notFoundHandler);
 app.use(errorHandler);

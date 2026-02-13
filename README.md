@@ -36,11 +36,25 @@ Default server: `http://localhost:8080`
 - `JSON_BODY_LIMIT` (default: `100kb`)
 - `RATE_LIMIT_WINDOW_MS` (default: `60000`)
 - `RATE_LIMIT_MAX_REQUESTS` (default: `120`)
+- `CONNECTOR_TIMEOUT_MS` (default: `5000`)
+- `CONNECTOR_RETRY_COUNT` (default: `2`)
+- `CONNECTOR_RETRY_BACKOFF_MS` (default: `250`)
+- `CIRCUIT_BREAKER_FAILURE_THRESHOLD` (default: `5`)
+- `CIRCUIT_BREAKER_OPEN_MS` (default: `30000`)
+- `GITHUB_API_BASE_URL` (default: `https://api.github.com`)
 - `SLACK_BOT_TOKEN` (required for approval notifications)
 - `SLACK_SIGNING_SECRET` (required for Slack callbacks)
 - `SLACK_APPROVAL_CHANNEL` (required for approval notifications)
 
 ## API flow
+
+Optional: configure GitHub token for tenant before GitHub proxy actions.
+
+```bash
+curl -s -X POST http://localhost:8080/connectors/github/credentials \
+  -H "content-type: application/json" \
+  -d '{"tenantId":"acme","token":"ghp_xxx"}'
+```
 
 1) Create an agent
 
@@ -72,7 +86,16 @@ curl -s -X POST http://localhost:8080/tokens/mint \
 curl -s -X POST http://localhost:8080/proxy/github/read_pr \
   -H "content-type: application/json" \
   -H "authorization: Bearer <token>" \
-  -d '{"payload":{"repo":"acme/api"}}'
+  -d '{"payload":{"owner":"acme","repo":"api","pull_number":42}}'
+```
+
+GitHub comment example:
+
+```bash
+curl -s -X POST http://localhost:8080/proxy/github/comment_pr \
+  -H "content-type: application/json" \
+  -H "authorization: Bearer <token>" \
+  -d '{"payload":{"owner":"acme","repo":"api","issue_number":42,"body":"Looks good"}}'
 ```
 
 ## Approval flow

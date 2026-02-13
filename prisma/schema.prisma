@@ -71,3 +71,15 @@ model ApprovalRequest {
   @@index([agentId])
   @@index([status])
 }
+
+model ConnectorCredential {
+  id         String   @id @default(uuid())
+  tenantId   String
+  connector  String
+  token      String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([tenantId, connector])
+  @@index([tenantId])
+}
