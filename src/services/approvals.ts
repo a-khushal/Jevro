@@ -1,65 +1,87 @@
-import { randomUUID } from "crypto";
-import { approvals } from "../store";
+import { consumeApproval as consumeApprovalRecord, createApproval, getApprovalById, resolveApproval as resolveApprovalRecord } from "../db";
 import { ApprovalRequest, ApprovalStatus } from "../types";
-import { nowIso } from "../utils/time";
 
 const APPROVAL_TTL_MINUTES = 10;
 
-function getExpiryIso(): string {
-  const expiresAt = new Date(Date.now() + APPROVAL_TTL_MINUTES * 60 * 1000);
-  return expiresAt.toISOString();
+function getExpiryDate(): Date {
+  return new Date(Date.now() + APPROVAL_TTL_MINUTES * 60 * 1000);
 }
 
-export function createApprovalRequest(input: {
+function toApprovalRequest(record: {
+  id: string;
   tenantId: string;
   agentId: string;
   connector: string;
   action: string;
+  status: string;
+  requestedAt: Date;
+  expiresAt: Date;
+  resolvedAt: Date | null;
+  resolvedBy: string | null;
 }): ApprovalRequest {
-  const approval: ApprovalRequest = {
-    id: randomUUID(),
+  return {
+    id: record.id,
+    tenantId: record.tenantId,
+    agentId: record.agentId,
+    connector: record.connector,
+    action: record.action,
+    status: record.status as ApprovalStatus,
+    requestedAt: record.requestedAt.toISOString(),
+    expiresAt: record.expiresAt.toISOString(),
+    resolvedAt: record.resolvedAt ? record.resolvedAt.toISOString() : undefined,
+    resolvedBy: record.resolvedBy ?? undefined
+  };
+}
+
+export async function createApprovalRequest(input: {
+  tenantId: string;
+  agentId: string;
+  connector: string;
+  action: string;
+}): Promise<ApprovalRequest> {
+  const created = await createApproval({
     tenantId: input.tenantId,
     agentId: input.agentId,
     connector: input.connector,
     action: input.action,
-    status: "pending",
-    requestedAt: nowIso(),
-    expiresAt: getExpiryIso()
-  };
+    requestedAt: new Date(),
+    expiresAt: getExpiryDate()
+  });
 
-  approvals.push(approval);
-  return approval;
+  return toApprovalRequest(created);
 }
 
-export function resolveApproval(input: {
+export async function resolveApproval(input: {
   approvalId: string;
   approverId: string;
   status: Extract<ApprovalStatus, "approved" | "rejected">;
-}): ApprovalRequest | null {
-  const approval = approvals.find((item) => item.id === input.approvalId);
-  if (!approval || approval.status !== "pending") {
+}): Promise<ApprovalRequest | null> {
+  const updated = await resolveApprovalRecord(input);
+  if (updated.count === 0) {
     return null;
   }
 
-  approval.status = input.status;
-  approval.resolvedBy = input.approverId;
-  approval.resolvedAt = nowIso();
-  return approval;
+  const approval = await getApprovalById(input.approvalId);
+  if (!approval) {
+    return null;
+  }
+
+  return toApprovalRequest(approval);
 }
 
-export function getUsableApproval(input: {
+export async function getUsableApproval(input: {
   approvalId: string;
   tenantId: string;
   agentId: string;
   connector: string;
   action: string;
-}): ApprovalRequest | null {
-  const approval = approvals.find((item) => item.id === input.approvalId);
+}): Promise<ApprovalRequest | null> {
+  const approval = await getApprovalById(input.approvalId);
   if (!approval) {
     return null;
   }
 
-  const isExpired = new Date(approval.expiresAt).getTime() <= Date.now();
+  const isExpired = approval.expiresAt.getTime() <= Date.now();
   if (
     approval.status !== "approved" ||
     isExpired ||
@@ -71,14 +93,9 @@ export function getUsableApproval(input: {
     return null;
   }
 
-  return approval;
+  return toApprovalRequest(approval);
 }
 
-export function consumeApproval(approvalId: string): void {
-  const approval = approvals.find((item) => item.id === approvalId);
-  if (!approval || approval.status !== "approved") {
-    return;
-  }
-
-  approval.status = "consumed";
+export async function consumeApproval(approvalId: string): Promise<void> {
+  await consumeApprovalRecord(approvalId);
 }

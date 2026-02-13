@@ -1,16 +1,8 @@
-import { policies } from "../store";
+import { listMatchingPolicies } from "../db";
 import { AuthorizeInput, Effect } from "../types";
 
-export function authorize(input: AuthorizeInput): Effect {
-  const matching = policies.filter((policy) => {
-    return (
-      policy.tenantId === input.tenantId &&
-      policy.agentId === input.agentId &&
-      policy.connector === input.connector &&
-      policy.environment === input.environment &&
-      policy.actions.includes(input.action)
-    );
-  });
+export async function authorize(input: AuthorizeInput): Promise<Effect> {
+  const matching = await listMatchingPolicies(input);
 
   if (matching.some((policy) => policy.effect === "deny")) {
     return "deny";

@@ -6,6 +6,8 @@ Express + TypeScript MVP for agent identity, policy enforcement, approvals, and 
 
 ```bash
 npm install
+npm run prisma:generate
+npm run prisma:migrate
 npm run build
 npm start
 ```
@@ -20,6 +22,7 @@ Default server: `http://localhost:8080`
 
 ## Environment variables
 
+- `DATABASE_URL` (required, Postgres)
 - `PORT` (default: `8080`)
 - `TOKEN_SECRET` (default: `local-dev-secret-change-me`)
 - `TOKEN_TTL_SECONDS` (default: `600`)

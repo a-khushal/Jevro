@@ -1,0 +1,73 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Agent {
+  id          String            @id @default(uuid())
+  tenantId    String
+  name        String
+  environment String
+  createdAt   DateTime          @default(now())
+  policies    Policy[]
+  auditEvents AuditEvent[]
+  approvals   ApprovalRequest[]
+
+  @@index([tenantId])
+}
+
+model Policy {
+  id          String   @id @default(uuid())
+  tenantId    String
+  agentId     String
+  connector   String
+  actions     String[]
+  environment String
+  effect      String
+  createdAt   DateTime @default(now())
+  agent       Agent    @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([agentId])
+  @@index([tenantId, agentId, connector, environment])
+}
+
+model AuditEvent {
+  id        String   @id @default(uuid())
+  tenantId  String
+  agentId   String?
+  eventType String
+  connector String?
+  action    String?
+  status    String
+  timestamp DateTime @default(now())
+  details   Json
+  agent     Agent?   @relation(fields: [agentId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId])
+  @@index([agentId])
+  @@index([eventType])
+  @@index([timestamp])
+}
+
+model ApprovalRequest {
+  id         String   @id @default(uuid())
+  tenantId   String
+  agentId    String
+  connector  String
+  action     String
+  status     String
+  requestedAt DateTime
+  expiresAt  DateTime
+  resolvedAt DateTime?
+  resolvedBy String?
+  agent      Agent    @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([agentId])
+  @@index([status])
+}

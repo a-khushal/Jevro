@@ -1,33 +1,30 @@
 import { Router } from "express";
+import { listApprovals } from "../db";
 import { addAuditEvent } from "../services/audit";
 import { resolveApproval } from "../services/approvals";
-import { approvals } from "../store";
+import { ApprovalStatus } from "../types";
 
 export const approvalsRouter = Router();
 
-approvalsRouter.get("/approvals", (req, res) => {
+approvalsRouter.get("/approvals", async (req, res) => {
   const tenantId = typeof req.query.tenantId === "string" ? req.query.tenantId : undefined;
   const agentId = typeof req.query.agentId === "string" ? req.query.agentId : undefined;
-  const status = typeof req.query.status === "string" ? req.query.status : undefined;
+  const status = typeof req.query.status === "string" ? (req.query.status as ApprovalStatus) : undefined;
 
-  let result = approvals;
+  const result = await listApprovals({ tenantId, agentId, status });
 
-  if (tenantId) {
-    result = result.filter((approval) => approval.tenantId === tenantId);
-  }
-
-  if (agentId) {
-    result = result.filter((approval) => approval.agentId === agentId);
-  }
-
-  if (status) {
-    result = result.filter((approval) => approval.status === status);
-  }
-
-  res.status(200).json({ count: result.length, approvals: result });
+  res.status(200).json({
+    count: result.length,
+    approvals: result.map((approval) => ({
+      ...approval,
+      requestedAt: approval.requestedAt.toISOString(),
+      expiresAt: approval.expiresAt.toISOString(),
+      resolvedAt: approval.resolvedAt ? approval.resolvedAt.toISOString() : null
+    }))
+  });
 });
 
-approvalsRouter.post("/approvals/:approvalId/decision", (req, res) => {
+approvalsRouter.post("/approvals/:approvalId/decision", async (req, res) => {
   const body = req.body as { approverId?: string; decision?: "approved" | "rejected" };
 
   if (!body.approverId || !body.decision) {
@@ -40,7 +37,7 @@ approvalsRouter.post("/approvals/:approvalId/decision", (req, res) => {
     return;
   }
 
-  const approval = resolveApproval({
+  const approval = await resolveApproval({
     approvalId: req.params.approvalId,
     approverId: body.approverId,
     status: body.decision
@@ -51,7 +48,7 @@ approvalsRouter.post("/approvals/:approvalId/decision", (req, res) => {
     return;
   }
 
-  addAuditEvent({
+  await addAuditEvent({
     tenantId: approval.tenantId,
     agentId: approval.agentId,
     eventType: "approval.resolved",

@@ -10,7 +10,7 @@ export const proxyRouter = Router();
 
 proxyRouter.post<{ connector: string; action: string }>(
   "/proxy/:connector/:action",
-  (req: Request<{ connector: string; action: string }>, res) => {
+  async (req: Request<{ connector: string; action: string }>, res) => {
     const token = parseBearerToken(req);
     if (!token) {
       res.status(401).json({ error: "Bearer token required" });
@@ -34,7 +34,7 @@ proxyRouter.post<{ connector: string; action: string }>(
       approvalId?: string;
     };
     const environment = body.environment ?? claims.env;
-    const decision = authorize({
+    const decision = await authorize({
       tenantId: claims.tenantId,
       agentId: claims.sub,
       connector: req.params.connector,
@@ -43,7 +43,7 @@ proxyRouter.post<{ connector: string; action: string }>(
     });
 
     if (decision === "deny") {
-      addAuditEvent({
+      await addAuditEvent({
         tenantId: claims.tenantId,
         agentId: claims.sub,
         eventType: "proxy.request",
@@ -58,7 +58,7 @@ proxyRouter.post<{ connector: string; action: string }>(
 
     if (decision === "require_approval") {
       if (body.approvalId) {
-        const approved = getUsableApproval({
+        const approved = await getUsableApproval({
           approvalId: body.approvalId,
           tenantId: claims.tenantId,
           agentId: claims.sub,
@@ -67,9 +67,9 @@ proxyRouter.post<{ connector: string; action: string }>(
         });
 
         if (approved) {
-          consumeApproval(approved.id);
+          await consumeApproval(approved.id);
 
-          addAuditEvent({
+          await addAuditEvent({
             tenantId: claims.tenantId,
             agentId: claims.sub,
             eventType: "approval.consumed",
@@ -85,7 +85,7 @@ proxyRouter.post<{ connector: string; action: string }>(
             payload: body.payload ?? {}
           });
 
-          addAuditEvent({
+          await addAuditEvent({
             tenantId: claims.tenantId,
             agentId: claims.sub,
             eventType: "proxy.request",
@@ -100,14 +100,14 @@ proxyRouter.post<{ connector: string; action: string }>(
         }
       }
 
-      const approval = createApprovalRequest({
+      const approval = await createApprovalRequest({
         tenantId: claims.tenantId,
         agentId: claims.sub,
         connector: req.params.connector,
         action: req.params.action
       });
 
-      addAuditEvent({
+      await addAuditEvent({
         tenantId: claims.tenantId,
         agentId: claims.sub,
         eventType: "approval.required",
@@ -130,7 +130,7 @@ proxyRouter.post<{ connector: string; action: string }>(
       payload: body.payload ?? {}
     });
 
-    addAuditEvent({
+    await addAuditEvent({
       tenantId: claims.tenantId,
       agentId: claims.sub,
       eventType: "proxy.request",

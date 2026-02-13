@@ -1,13 +1,11 @@
-import { randomUUID } from "crypto";
 import { Router } from "express";
+import { createAgent } from "../db";
 import { addAuditEvent } from "../services/audit";
-import { agents } from "../store";
-import { Agent, Environment } from "../types";
-import { nowIso } from "../utils/time";
+import { Environment } from "../types";
 
 export const agentsRouter = Router();
 
-agentsRouter.post("/agents", (req, res) => {
+agentsRouter.post("/agents", async (req, res) => {
   const body = req.body as { tenantId?: string; name?: string; environment?: Environment };
 
   if (!body.tenantId || !body.name) {
@@ -15,16 +13,13 @@ agentsRouter.post("/agents", (req, res) => {
     return;
   }
 
-  const agent: Agent = {
-    id: randomUUID(),
+  const agent = await createAgent({
     tenantId: body.tenantId,
     name: body.name,
-    environment: body.environment ?? "dev",
-    createdAt: nowIso()
-  };
-  agents.set(agent.id, agent);
+    environment: body.environment ?? "dev"
+  });
 
-  addAuditEvent({
+  await addAuditEvent({
     tenantId: agent.tenantId,
     agentId: agent.id,
     eventType: "agent.created",
@@ -32,5 +27,5 @@ agentsRouter.post("/agents", (req, res) => {
     details: { name: agent.name, environment: agent.environment }
   });
 
-  res.status(201).json(agent);
+  res.status(201).json({ ...agent, createdAt: agent.createdAt.toISOString() });
 });

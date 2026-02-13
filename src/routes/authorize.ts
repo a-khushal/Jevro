@@ -5,7 +5,7 @@ import { AuthorizeInput } from "../types";
 
 export const authorizeRouter = Router();
 
-authorizeRouter.post("/authorize", (req, res) => {
+authorizeRouter.post("/authorize", async (req, res) => {
   const body = req.body as Partial<AuthorizeInput>;
 
   if (!body.tenantId || !body.agentId || !body.connector || !body.action || !body.environment) {
@@ -13,8 +13,8 @@ authorizeRouter.post("/authorize", (req, res) => {
     return;
   }
 
-  const decision = authorize(body as AuthorizeInput);
-  addAuditEvent({
+  const decision = await authorize(body as AuthorizeInput);
+  await addAuditEvent({
     tenantId: body.tenantId,
     agentId: body.agentId,
     eventType: "policy.evaluated",
