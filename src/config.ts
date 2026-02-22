@@ -30,7 +30,9 @@ const envSchema = z.object({
   SLACK_BOT_TOKEN: z.string().optional(),
   SLACK_SIGNING_SECRET: z.string().optional(),
   SLACK_APPROVAL_CHANNEL: z.string().optional(),
-  APPROVAL_EXPIRATION_SWEEP_MS: z.coerce.number().int().positive().default(60000)
+  APPROVAL_EXPIRATION_SWEEP_MS: z.coerce.number().int().positive().default(60000),
+  ADMIN_UI_USERNAME: z.string().min(1).default("admin"),
+  ADMIN_UI_PASSWORD: z.string().min(8).default("change-me-admin")
 });
 
 const parsed = envSchema.safeParse(process.env);
@@ -68,3 +70,5 @@ export const SLACK_BOT_TOKEN = env.SLACK_BOT_TOKEN;
 export const SLACK_SIGNING_SECRET = env.SLACK_SIGNING_SECRET;
 export const SLACK_APPROVAL_CHANNEL = env.SLACK_APPROVAL_CHANNEL;
 export const APPROVAL_EXPIRATION_SWEEP_MS = env.APPROVAL_EXPIRATION_SWEEP_MS;
+export const ADMIN_UI_USERNAME = env.ADMIN_UI_USERNAME;
+export const ADMIN_UI_PASSWORD = env.ADMIN_UI_PASSWORD;

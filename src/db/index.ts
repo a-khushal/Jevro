@@ -25,6 +25,17 @@ export async function getAgentByTenantAndId(input: { tenantId: string; agentId: 
   });
 }
 
+export async function listAgentsByTenant(tenantId: string) {
+  return prisma.agent.findMany({
+    where: {
+      tenantId
+    },
+    orderBy: {
+      createdAt: "desc"
+    }
+  });
+}
+
 export async function createPolicy(input: {
   tenantId: string;
   agentId: string;

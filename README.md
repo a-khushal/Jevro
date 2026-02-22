@@ -84,6 +84,14 @@ Environment templates for deployment are included in `.env.staging.example` and 
 - `SLACK_SIGNING_SECRET` (required for Slack callbacks)
 - `SLACK_APPROVAL_CHANNEL` (required for approval notifications)
 - `APPROVAL_EXPIRATION_SWEEP_MS` (default: `60000`)
+- `ADMIN_UI_USERNAME` (default: `admin`)
+- `ADMIN_UI_PASSWORD` (default: `change-me-admin`, change this in non-local environments)
+
+## Admin UI
+
+- URL: `http://localhost:8080/admin`
+- Auth: HTTP Basic using `ADMIN_UI_USERNAME` and `ADMIN_UI_PASSWORD`
+- Includes: tenant/agent management, policy editor + preview, approvals queue + decision panel, audit timeline view
 
 ## API flow
 
@@ -192,6 +200,12 @@ curl -s -X POST http://localhost:8080/v1/proxy/slack/post_message \
 - Curl quickstart: `examples/curl/quickstart.sh`
 - Postman collection: `examples/postman/okta-for-agents-mvp.postman_collection.json`
 
+## TypeScript SDK + sample app
+
+- SDK source: `src/sdk/typescript/index.ts`
+- Sample agent app: `examples/agent-ts/index.ts`
+- Run sample: `AGENT_ID=<agent-id> TENANT_ID=acme npm run example:agent`
+
 ## Load testing
 
 ```bash
@@ -206,3 +220,7 @@ npm run loadtest
 - Migration rollout/rollback: `docs/operations/migration-rollout.md`
 - Connector outage runbook: `docs/operations/connectors-runbook.md`
 - SLOs and alert thresholds: `docs/operations/slo-alerts.md`
+
+## Error troubleshooting
+
+- Error catalog + fixes: `docs/error-catalog.md`

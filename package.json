@@ -14,9 +14,10 @@
     "prisma:validate": "prisma validate",
     "prisma:migrate:status": "prisma migrate status",
     "loadtest": "node scripts/loadtest.js",
-    "test": "tsx --test src/**/*.test.ts",
-    "test:db": "REQUIRE_DB_TESTS=1 tsx --test --test-concurrency=1 src/**/*.test.ts",
-    "test:with-db": "bash scripts/test-with-db.sh"
+    "test": "tsx --test \"src/**/*.test.ts\"",
+    "test:db": "REQUIRE_DB_TESTS=1 tsx --test --test-concurrency=1 \"src/**/*.test.ts\"",
+    "test:with-db": "bash scripts/test-with-db.sh",
+    "example:agent": "tsx examples/agent-ts/index.ts"
   },
   "keywords": [],
   "author": "",

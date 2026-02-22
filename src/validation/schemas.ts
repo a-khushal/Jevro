@@ -10,6 +10,10 @@ export const createAgentSchema = z.object({
   environment: environmentSchema.optional()
 });
 
+export const listAgentsQuerySchema = z.object({
+  tenantId: z.string().min(1)
+});
+
 export const createPolicySchema = z.object({
   tenantId: z.string().min(1),
   agentId: z.string().min(1),

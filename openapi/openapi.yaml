@@ -12,6 +12,16 @@ paths:
         "200":
           description: Healthy
   /agents:
+    get:
+      summary: List agents for a tenant
+      parameters:
+        - in: query
+          name: tenantId
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Agents list
     post:
       summary: Create an agent
       requestBody:

@@ -5,6 +5,7 @@ import helmet from "helmet";
 import { CORS_ORIGINS, JSON_BODY_LIMIT, RATE_LIMIT_MAX_REQUESTS, RATE_LIMIT_WINDOW_MS } from "./config";
 import { errorHandler, notFoundHandler } from "./errors";
 import { agentsRouter } from "./routes/agents";
+import { adminRouter } from "./routes/admin";
 import { approvalsRouter } from "./routes/approvals";
 import { auditRouter } from "./routes/audit";
 import { authorizeRouter } from "./routes/authorize";
@@ -56,6 +57,8 @@ const apiRouters = [
   slackRouter,
   connectorsRouter
 ];
+
+app.use(adminRouter);
 
 for (const router of apiRouters) {
   app.use(router);
