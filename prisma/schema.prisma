@@ -13,11 +13,13 @@ model Agent {
   name        String
   environment String
   createdAt   DateTime          @default(now())
+  deletedAt   DateTime?
   policies    Policy[]
   auditEvents AuditEvent[]
   approvals   ApprovalRequest[]
 
   @@index([tenantId])
+  @@index([tenantId, deletedAt])
 }
 
 model Policy {
@@ -29,11 +31,14 @@ model Policy {
   environment String
   effect      String
   createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  deletedAt   DateTime?
   agent       Agent    @relation(fields: [agentId], references: [id], onDelete: Cascade)
 
   @@index([tenantId])
   @@index([agentId])
   @@index([tenantId, agentId, connector, environment])
+  @@index([tenantId, deletedAt])
 }
 
 model AuditEvent {
@@ -70,6 +75,7 @@ model ApprovalRequest {
   @@index([tenantId])
   @@index([agentId])
   @@index([status])
+  @@index([resolvedAt])
 }
 
 model ConnectorCredential {
@@ -82,4 +88,29 @@ model ConnectorCredential {
 
   @@unique([tenantId, connector])
   @@index([tenantId])
+}
+
+model SigningKey {
+  id           String    @id @default(uuid())
+  kid          String    @unique
+  secret       String
+  isActive     Boolean   @default(false)
+  createdAt    DateTime  @default(now())
+  activatedAt  DateTime?
+  deactivatedAt DateTime?
+
+  @@index([isActive])
+}
+
+model RevokedToken {
+  id        String   @id @default(uuid())
+  jti       String   @unique
+  tenantId  String
+  agentId   String
+  reason    String?
+  revokedAt DateTime @default(now())
+  expiresAt DateTime
+
+  @@index([tenantId])
+  @@index([expiresAt])
 }

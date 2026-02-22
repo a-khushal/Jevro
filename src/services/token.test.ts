@@ -12,6 +12,7 @@ test("createToken + verifyToken returns claims for valid token", () => {
     sub: "agent-1",
     tenantId: "acme",
     env: "prod",
+    jti: "jti-1",
     iat: now,
     exp: now + 60
   });
@@ -28,6 +29,7 @@ test("verifyToken rejects tampered token", () => {
     sub: "agent-1",
     tenantId: "acme",
     env: "prod",
+    jti: "jti-2",
     iat: now,
     exp: now + 60
   });
@@ -43,6 +45,7 @@ test("verifyToken rejects expired token", () => {
     sub: "agent-1",
     tenantId: "acme",
     env: "prod",
+    jti: "jti-3",
     iat: now - 60,
     exp: now - 1
   });

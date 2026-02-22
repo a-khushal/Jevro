@@ -18,6 +18,7 @@ export interface TokenClaims {
   sub: string;
   tenantId: string;
   env: Environment;
+  jti: string;
   iat: number;
   exp: number;
 }

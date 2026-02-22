@@ -1,9 +1,10 @@
 import { Router } from "express";
-import { createAgent, listAgentsByTenant } from "../db";
+import { createAgent, listAgentsByTenant, softDeleteAgentByTenantAndId } from "../db";
+import { AppError } from "../errors";
 import { validate } from "../middleware/validate";
 import { addAuditEvent } from "../services/audit";
 import { Environment } from "../types";
-import { createAgentSchema, listAgentsQuerySchema } from "../validation/schemas";
+import { agentParamsSchema, createAgentSchema, deleteAgentSchema, listAgentsQuerySchema } from "../validation/schemas";
 
 export const agentsRouter = Router();
 
@@ -36,3 +37,27 @@ agentsRouter.post("/agents", validate({ body: createAgentSchema }), async (req, 
 
   res.status(201).json({ ...agent, createdAt: agent.createdAt.toISOString() });
 });
+
+agentsRouter.delete(
+  "/agents/:agentId",
+  validate({ params: agentParamsSchema, body: deleteAgentSchema }),
+  async (req, res) => {
+    const body = req.body as { tenantId: string };
+    const agentId = req.params.agentId as string;
+
+    const removed = await softDeleteAgentByTenantAndId({ tenantId: body.tenantId, agentId });
+    if (removed.count === 0) {
+      throw new AppError(404, "AGENT_NOT_FOUND", "Agent not found for tenant");
+    }
+
+    await addAuditEvent({
+      tenantId: body.tenantId,
+      agentId,
+      eventType: "agent.deleted",
+      status: "success",
+      details: { softDelete: true }
+    });
+
+    res.status(200).json({ deleted: true, agentId });
+  }
+);

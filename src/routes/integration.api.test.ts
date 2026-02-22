@@ -50,12 +50,16 @@ test("list endpoints require tenantId for tenant isolation", async (t) => {
   await resetDatabase();
 
   const listPolicies = await request.get("/v1/policies");
+  const listAgents = await request.get("/v1/agents");
   const listApprovals = await request.get("/v1/approvals");
   const listAudit = await request.get("/v1/audit-events");
+  const listConnectorHealth = await request.get("/v1/connectors/health");
 
   assert.equal(listPolicies.status, 400);
+  assert.equal(listAgents.status, 400);
   assert.equal(listApprovals.status, 400);
   assert.equal(listAudit.status, 400);
+  assert.equal(listConnectorHealth.status, 400);
 });
 
 test("authorize rejects environment mismatch", async (t) => {

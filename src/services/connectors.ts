@@ -40,7 +40,17 @@ type CircuitState = {
   openUntil: number;
 };
 
+type ConnectorTelemetry = {
+  totalSuccess: number;
+  totalFailure: number;
+  lastSuccessAt?: string;
+  lastFailureAt?: string;
+  lastErrorCode?: string;
+  lastErrorMessage?: string;
+};
+
 const circuitStateByKey = new Map<string, CircuitState>();
+const telemetryByKey = new Map<string, ConnectorTelemetry>();
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -76,14 +86,30 @@ function assertCircuitClosed(tenantId: string, connector: string): void {
 function markConnectorSuccess(tenantId: string, connector: string): void {
   const key = getCircuitKey(tenantId, connector);
   circuitStateByKey.set(key, { failures: 0, openUntil: 0 });
+
+  const telemetry = telemetryByKey.get(key) ?? { totalSuccess: 0, totalFailure: 0 };
+  telemetryByKey.set(key, {
+    ...telemetry,
+    totalSuccess: telemetry.totalSuccess + 1,
+    lastSuccessAt: nowIso()
+  });
 }
 
-function markConnectorFailure(tenantId: string, connector: string): void {
+function markConnectorFailure(tenantId: string, connector: string, error?: unknown): void {
   const key = getCircuitKey(tenantId, connector);
   const current = circuitStateByKey.get(key) ?? { failures: 0, openUntil: 0 };
   const failures = current.failures + 1;
   const openUntil = failures >= CIRCUIT_BREAKER_FAILURE_THRESHOLD ? Date.now() + CIRCUIT_BREAKER_OPEN_MS : 0;
   circuitStateByKey.set(key, { failures, openUntil });
+
+  const telemetry = telemetryByKey.get(key) ?? { totalSuccess: 0, totalFailure: 0 };
+  telemetryByKey.set(key, {
+    ...telemetry,
+    totalFailure: telemetry.totalFailure + 1,
+    lastFailureAt: nowIso(),
+    lastErrorCode: error instanceof AppError ? error.code : undefined,
+    lastErrorMessage: error instanceof Error ? error.message : undefined
+  });
 }
 
 function getPayloadValue<T>(payload: Record<string, unknown>, key: string): T {
@@ -450,19 +476,47 @@ export function getSupportedActionsForConnector(connector: string): string[] {
   return [...(ACTIONS_BY_CONNECTOR[connector] ?? new Set<string>())];
 }
 
+function getRequiredScopesForConnector(connector: string): Record<string, string[]> {
+  const scopes: Record<string, string[]> = {};
+  for (const action of getSupportedActionsForConnector(connector)) {
+    const key = `${connector}:${action}`;
+    if (REQUIRED_SCOPES_BY_ACTION[key]) {
+      scopes[action] = REQUIRED_SCOPES_BY_ACTION[key];
+    }
+  }
+
+  return scopes;
+}
+
 export async function getConnectorHealthForTenant(input: {
   tenantId: string;
   connector: string;
-}): Promise<{ connector: string; configured: boolean; circuit: "open" | "closed"; supportedActions: string[] }> {
+}): Promise<{
+  connector: string;
+  configured: boolean;
+  circuit: "open" | "closed";
+  circuitFailures: number;
+  circuitOpenUntil: string | null;
+  supportedActions: string[];
+  requiredScopesByAction: Record<string, string[]>;
+  telemetry: ConnectorTelemetry;
+}> {
   const configured = input.connector === "postgres"
     ? true
     : !!(await getConnectorCredential({ tenantId: input.tenantId, connector: input.connector }));
+  const key = getCircuitKey(input.tenantId, input.connector);
+  const circuitState = circuitStateByKey.get(key) ?? { failures: 0, openUntil: 0 };
+  const telemetry = telemetryByKey.get(key) ?? { totalSuccess: 0, totalFailure: 0 };
 
   return {
     connector: input.connector,
     configured,
     circuit: getCircuitStatus(input.tenantId, input.connector),
-    supportedActions: getSupportedActionsForConnector(input.connector)
+    circuitFailures: circuitState.failures,
+    circuitOpenUntil: circuitState.openUntil > 0 ? new Date(circuitState.openUntil).toISOString() : null,
+    supportedActions: getSupportedActionsForConnector(input.connector),
+    requiredScopesByAction: getRequiredScopesForConnector(input.connector),
+    telemetry
   };
 }
 
@@ -491,7 +545,7 @@ export async function executeConnectorAction(input: ConnectorExecutionInput): Pr
     markConnectorSuccess(input.tenantId, input.connector);
     return result;
   } catch (error) {
-    markConnectorFailure(input.tenantId, input.connector);
+    markConnectorFailure(input.tenantId, input.connector, error);
     throw error;
   }
 }

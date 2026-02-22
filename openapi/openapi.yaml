@@ -38,6 +38,26 @@ paths:
       responses:
         "201":
           description: Agent created
+  /agents/{agentId}:
+    delete:
+      summary: Soft-delete an agent
+      parameters:
+        - in: path
+          name: agentId
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [tenantId]
+              properties:
+                tenantId: { type: string }
+      responses:
+        "200":
+          description: Agent soft-deleted
   /policies:
     get:
       summary: List policies for a tenant
@@ -90,6 +110,56 @@ paths:
       responses:
         "200":
           description: Token minted
+  /tokens/revoke:
+    post:
+      summary: Revoke a JWT by token value
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [tenantId, token]
+              properties:
+                tenantId: { type: string }
+                token: { type: string }
+                reason: { type: string }
+      responses:
+        "200":
+          description: Token revoked
+  /tokens/keys:
+    get:
+      summary: List signing key metadata
+      responses:
+        "200":
+          description: Key metadata list
+    post:
+      summary: Create a signing key
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [kid, secret]
+              properties:
+                kid: { type: string }
+                secret: { type: string }
+                activate: { type: boolean }
+      responses:
+        "201":
+          description: Signing key created
+  /tokens/keys/{kid}/activate:
+    post:
+      summary: Activate an existing signing key
+      parameters:
+        - in: path
+          name: kid
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Signing key activated
   /authorize:
     post:
       summary: Evaluate policy decision
@@ -202,6 +272,51 @@ paths:
       responses:
         "200":
           description: Audit events list
+  /policies/{policyId}:
+    patch:
+      summary: Update policy fields
+      parameters:
+        - in: path
+          name: policyId
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [tenantId]
+              properties:
+                tenantId: { type: string }
+                connector: { type: string }
+                actions:
+                  type: array
+                  items: { type: string }
+                environment: { type: string, enum: [dev, staging, prod] }
+                effect: { type: string, enum: [allow, deny, require_approval] }
+      responses:
+        "200":
+          description: Policy updated
+    delete:
+      summary: Soft-delete policy
+      parameters:
+        - in: path
+          name: policyId
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [tenantId]
+              properties:
+                tenantId: { type: string }
+      responses:
+        "200":
+          description: Policy soft-deleted
   /connectors/health:
     get:
       summary: Get connector health by tenant

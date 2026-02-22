@@ -14,6 +14,7 @@ cp .env.example .env
 npm install
 npm run prisma:generate
 npm run prisma:migrate
+npm run seed
 npm run build
 npm start
 ```
@@ -43,6 +44,12 @@ Run full test suite with local ephemeral Postgres (recommended for integration/e
 npm run test:with-db
 ```
 
+Seed local demo data:
+
+```bash
+npm run seed
+```
+
 Direct DB-backed test run (requires a reachable Postgres in `DATABASE_URL`):
 
 ```bash
@@ -59,6 +66,7 @@ Environment templates for deployment are included in `.env.staging.example` and 
 - `DATABASE_URL` (required, Postgres)
 - `PORT` (default: `8080`)
 - `TOKEN_SECRET` (default: `local-dev-secret-change-me`)
+- `TOKEN_DEFAULT_KID` (default: `local-dev-kid-1`)
 - `TOKEN_TTL_SECONDS` (default: `600`)
 - `CORS_ORIGINS` (default: `http://localhost:3000,http://localhost:5173`)
 - `JSON_BODY_LIMIT` (default: `100kb`)
@@ -84,6 +92,11 @@ Environment templates for deployment are included in `.env.staging.example` and 
 - `SLACK_SIGNING_SECRET` (required for Slack callbacks)
 - `SLACK_APPROVAL_CHANNEL` (required for approval notifications)
 - `APPROVAL_EXPIRATION_SWEEP_MS` (default: `60000`)
+- `RETENTION_SWEEP_MS` (default: `300000`)
+- `AUDIT_RETENTION_DAYS` (default: `30`)
+- `APPROVAL_RETENTION_DAYS` (default: `30`)
+- `SECURITY_ALERT_WINDOW_MS` (default: `300000`)
+- `SECURITY_ALERT_THRESHOLD` (default: `10`)
 - `ADMIN_UI_USERNAME` (default: `admin`)
 - `ADMIN_UI_PASSWORD` (default: `change-me-admin`, change this in non-local environments)
 
@@ -92,6 +105,13 @@ Environment templates for deployment are included in `.env.staging.example` and 
 - URL: `http://localhost:8080/admin`
 - Auth: HTTP Basic using `ADMIN_UI_USERNAME` and `ADMIN_UI_PASSWORD`
 - Includes: tenant/agent management, policy editor + preview, approvals queue + decision panel, audit timeline view
+
+## Token key management
+
+- Create key: `POST /v1/tokens/keys`
+- Activate key: `POST /v1/tokens/keys/:kid/activate`
+- List key metadata: `GET /v1/tokens/keys`
+- Revoke token by JWT: `POST /v1/tokens/revoke`
 
 ## API flow
 
@@ -190,6 +210,8 @@ curl -s -X POST http://localhost:8080/v1/proxy/slack/post_message \
 
 - `GET /v1/health`
 - `GET /v1/policies?tenantId=acme&agentId=<agentId>`
+- `PATCH /v1/policies/:policyId` (soft lifecycle update)
+- `DELETE /v1/policies/:policyId` (soft delete)
 - `GET /v1/audit-events?tenantId=acme&agentId=<agentId>&eventType=proxy.request`
 - `GET /v1/approvals?tenantId=acme&status=pending`
 - `GET /v1/connectors/health?tenantId=acme`
@@ -206,6 +228,12 @@ curl -s -X POST http://localhost:8080/v1/proxy/slack/post_message \
 - Sample agent app: `examples/agent-ts/index.ts`
 - Run sample: `AGENT_ID=<agent-id> TENANT_ID=acme npm run example:agent`
 
+## Python SDK + sample app
+
+- SDK source: `sdk/python/okta_for_agents/client.py`
+- Sample agent app: `examples/agent-py/main.py`
+- Run sample: `AGENT_ID=<agent-id> TENANT_ID=acme python3 examples/agent-py/main.py`
+
 ## Load testing
 
 ```bash
@@ -217,9 +245,12 @@ npm run loadtest
 ## Operations docs
 
 - Backup/restore: `docs/operations/backup-restore.md`
+- Data retention policy: `docs/operations/data-retention.md`
 - Migration rollout/rollback: `docs/operations/migration-rollout.md`
 - Connector outage runbook: `docs/operations/connectors-runbook.md`
 - SLOs and alert thresholds: `docs/operations/slo-alerts.md`
+- Token key rotation runbook: `docs/operations/token-key-rotation.md`
+- Tenant isolation audit sweep: `docs/security/tenant-isolation-audit.md`
 
 ## Error troubleshooting
 

@@ -105,6 +105,34 @@ export async function sendSlackApprovalRequest(input: {
   };
 }
 
+export async function sendSlackOperationalAlert(text: string): Promise<void> {
+  if (!SLACK_BOT_TOKEN || !SLACK_APPROVAL_CHANNEL) {
+    return;
+  }
+
+  try {
+    const response = await fetch(`${SLACK_API_BASE_URL}/chat.postMessage`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${SLACK_BOT_TOKEN}`
+      },
+      body: JSON.stringify({
+        channel: SLACK_APPROVAL_CHANNEL,
+        text
+      })
+    });
+
+    if (!response.ok) {
+      return;
+    }
+
+    await response.arrayBuffer();
+  } catch (_error) {
+    // Suppress alert delivery failures to avoid request path disruption.
+  }
+}
+
 export function verifySlackSignature(input: {
   rawBody: string;
   timestampHeader: string | undefined;

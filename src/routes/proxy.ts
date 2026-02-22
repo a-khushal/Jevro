@@ -5,8 +5,9 @@ import { addAuditEvent } from "../services/audit";
 import { consumeApproval, createApprovalRequest, getUsableApproval } from "../services/approvals";
 import { authorize } from "../services/authorize";
 import { executeConnectorAction, isSupportedConnector } from "../services/connectors";
+import { recordSecuritySignal } from "../services/securityAlerts";
 import { sendSlackApprovalRequest } from "../services/slack";
-import { parseBearerToken, verifyToken } from "../services/token";
+import { isManagedTokenRevoked, parseBearerToken, verifyManagedToken } from "../services/token";
 import { enforceTrafficControls } from "../services/traffic";
 import { Environment } from "../types";
 import { proxyBodySchema, proxyParamsSchema } from "../validation/schemas";
@@ -19,12 +20,19 @@ proxyRouter.post<{ connector: string; action: string }>(
   async (req: Request<{ connector: string; action: string }>, res) => {
     const token = parseBearerToken(req);
     if (!token) {
+      await recordSecuritySignal({ signal: "token_failure" });
       throw new AppError(401, "MISSING_BEARER_TOKEN", "Bearer token required");
     }
 
-    const claims = verifyToken(token);
+    const claims = await verifyManagedToken(token);
     if (!claims) {
+      await recordSecuritySignal({ signal: "token_failure" });
       throw new AppError(401, "INVALID_TOKEN", "Invalid or expired token");
+    }
+
+    if (await isManagedTokenRevoked(claims.jti)) {
+      await recordSecuritySignal({ signal: "token_failure", tenantId: claims.tenantId, details: { reason: "revoked" } });
+      throw new AppError(401, "INVALID_TOKEN_REVOKED", "Token has been revoked");
     }
 
     if (!isSupportedConnector(req.params.connector)) {
@@ -56,6 +64,11 @@ proxyRouter.post<{ connector: string; action: string }>(
     };
 
     if (body.environment && body.environment !== claims.env) {
+      await recordSecuritySignal({
+        signal: "policy_bypass_attempt",
+        tenantId: claims.tenantId,
+        details: { reason: "token_env_mismatch", requestedEnv: body.environment, tokenEnv: claims.env }
+      });
       throw new AppError(403, "TOKEN_ENV_MISMATCH", "Token environment does not match requested environment");
     }
 
@@ -143,6 +156,12 @@ proxyRouter.post<{ connector: string; action: string }>(
           res.status(200).json({ decision: "allow", providerResponse });
           return;
         }
+
+        await recordSecuritySignal({
+          signal: "policy_bypass_attempt",
+          tenantId: claims.tenantId,
+          details: { reason: "invalid_or_reused_approval", approvalId: body.approvalId }
+        });
       }
 
       const approval = await createApprovalRequest({

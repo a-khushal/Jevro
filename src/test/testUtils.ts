@@ -12,6 +12,8 @@ export const request = supertest(app);
 
 export async function resetDatabase(): Promise<void> {
   await prisma.auditEvent.deleteMany();
+  await prisma.revokedToken.deleteMany();
+  await prisma.signingKey.deleteMany();
   await prisma.policy.deleteMany();
   await prisma.approvalRequest.deleteMany();
   await prisma.connectorCredential.deleteMany();
