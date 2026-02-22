@@ -18,13 +18,28 @@ npm run build
 npm start
 ```
 
+Run with Docker (app + Postgres + Redis):
+
+```bash
+cp .env.example .env
+docker compose up --build
+```
+
 Dev mode (watch compiler):
 
 ```bash
 npm run dev
 ```
 
+Run tests:
+
+```bash
+npm test
+```
+
 Default server: `http://localhost:8080`
+
+Environment templates for deployment are included in `.env.staging.example` and `.env.production.example`.
 
 ## Environment variables
 
@@ -36,15 +51,25 @@ Default server: `http://localhost:8080`
 - `JSON_BODY_LIMIT` (default: `100kb`)
 - `RATE_LIMIT_WINDOW_MS` (default: `60000`)
 - `RATE_LIMIT_MAX_REQUESTS` (default: `120`)
+- `TENANT_RATE_LIMIT_WINDOW_MS` (default: `60000`)
+- `TENANT_RATE_LIMIT_MAX_REQUESTS` (default: `240`)
+- `AGENT_RATE_LIMIT_WINDOW_MS` (default: `60000`)
+- `AGENT_RATE_LIMIT_MAX_REQUESTS` (default: `120`)
+- `CONNECTOR_RATE_LIMIT_WINDOW_MS` (default: `60000`)
+- `CONNECTOR_RATE_LIMIT_MAX_REQUESTS` (default: `180`)
+- `TENANT_DAILY_QUOTA` (default: `10000`)
+- `TENANT_QUOTA_OVERAGE_BEHAVIOR` (`block` or `allow_with_audit`, default: `block`)
 - `CONNECTOR_TIMEOUT_MS` (default: `5000`)
 - `CONNECTOR_RETRY_COUNT` (default: `2`)
 - `CONNECTOR_RETRY_BACKOFF_MS` (default: `250`)
 - `CIRCUIT_BREAKER_FAILURE_THRESHOLD` (default: `5`)
 - `CIRCUIT_BREAKER_OPEN_MS` (default: `30000`)
 - `GITHUB_API_BASE_URL` (default: `https://api.github.com`)
+- `SLACK_API_BASE_URL` (default: `https://slack.com/api`)
 - `SLACK_BOT_TOKEN` (required for approval notifications)
 - `SLACK_SIGNING_SECRET` (required for Slack callbacks)
 - `SLACK_APPROVAL_CHANNEL` (required for approval notifications)
+- `APPROVAL_EXPIRATION_SWEEP_MS` (default: `60000`)
 
 ## API flow
 
@@ -54,6 +79,14 @@ Optional: configure GitHub token for tenant before GitHub proxy actions.
 curl -s -X POST http://localhost:8080/connectors/github/credentials \
   -H "content-type: application/json" \
   -d '{"tenantId":"acme","token":"ghp_xxx"}'
+```
+
+Optional: configure Slack token for tenant before Slack proxy actions.
+
+```bash
+curl -s -X POST http://localhost:8080/connectors/slack/credentials \
+  -H "content-type: application/json" \
+  -d '{"tenantId":"acme","token":"xoxb-xxx"}'
 ```
 
 1) Create an agent

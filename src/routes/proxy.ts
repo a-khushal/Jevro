@@ -7,6 +7,7 @@ import { authorize } from "../services/authorize";
 import { executeConnectorAction, isSupportedConnector } from "../services/connectors";
 import { sendSlackApprovalRequest } from "../services/slack";
 import { parseBearerToken, verifyToken } from "../services/token";
+import { enforceTrafficControls } from "../services/traffic";
 import { Environment } from "../types";
 import { proxyBodySchema, proxyParamsSchema } from "../validation/schemas";
 
@@ -28,6 +29,24 @@ proxyRouter.post<{ connector: string; action: string }>(
 
     if (!isSupportedConnector(req.params.connector)) {
       throw new AppError(400, "UNSUPPORTED_CONNECTOR", "Unsupported connector");
+    }
+
+    const trafficResult = enforceTrafficControls({
+      tenantId: claims.tenantId,
+      agentId: claims.sub,
+      connector: req.params.connector
+    });
+
+    if (trafficResult.quotaExceeded) {
+      await addAuditEvent({
+        tenantId: claims.tenantId,
+        agentId: claims.sub,
+        eventType: "quota.exceeded",
+        connector: req.params.connector,
+        action: req.params.action,
+        status: "failure",
+        details: { behavior: "allow_with_audit" }
+      });
     }
 
     const body = req.body as {

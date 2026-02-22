@@ -1,9 +1,7 @@
 import { listMatchingPolicies } from "../db";
 import { AuthorizeInput, Effect } from "../types";
 
-export async function authorize(input: AuthorizeInput): Promise<Effect> {
-  const matching = await listMatchingPolicies(input);
-
+export function evaluatePolicyDecision(matching: Array<{ effect: string }>): Effect {
   if (matching.some((policy) => policy.effect === "deny")) {
     return "deny";
   }
@@ -17,4 +15,9 @@ export async function authorize(input: AuthorizeInput): Promise<Effect> {
   }
 
   return "deny";
+}
+
+export async function authorize(input: AuthorizeInput): Promise<Effect> {
+  const matching = await listMatchingPolicies(input);
+  return evaluatePolicyDecision(matching);
 }

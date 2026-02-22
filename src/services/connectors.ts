@@ -4,7 +4,8 @@ import {
   CONNECTOR_RETRY_BACKOFF_MS,
   CONNECTOR_RETRY_COUNT,
   CONNECTOR_TIMEOUT_MS,
-  GITHUB_API_BASE_URL
+  GITHUB_API_BASE_URL,
+  SLACK_API_BASE_URL
 } from "../config";
 import { getConnectorCredential } from "../db";
 import { AppError } from "../errors";
@@ -104,6 +105,54 @@ function getGithubActionRequest(input: {
   throw new AppError(400, "GITHUB_ACTION_UNSUPPORTED", `Unsupported GitHub action: ${input.action}`);
 }
 
+function getSlackActionRequest(input: {
+  action: string;
+  payload: Record<string, unknown>;
+}): { method: "POST"; path: string; body: Record<string, unknown> } {
+  if (input.action === "post_message") {
+    const channel = getPayloadValue<string>(input.payload, "channel");
+    const text = getPayloadValue<string>(input.payload, "text");
+
+    if (!channel || !text) {
+      throw new AppError(400, "SLACK_PAYLOAD_INVALID", "post_message requires channel and text");
+    }
+
+    return {
+      method: "POST",
+      path: "/chat.postMessage",
+      body: { channel, text }
+    };
+  }
+
+  if (input.action === "read_channel") {
+    const channel = getPayloadValue<string>(input.payload, "channel");
+    if (!channel) {
+      throw new AppError(400, "SLACK_PAYLOAD_INVALID", "read_channel requires channel");
+    }
+
+    return {
+      method: "POST",
+      path: "/conversations.info",
+      body: { channel }
+    };
+  }
+
+  if (input.action === "lookup_user") {
+    const user = getPayloadValue<string>(input.payload, "user");
+    if (!user) {
+      throw new AppError(400, "SLACK_PAYLOAD_INVALID", "lookup_user requires user");
+    }
+
+    return {
+      method: "POST",
+      path: "/users.info",
+      body: { user }
+    };
+  }
+
+  throw new AppError(400, "SLACK_ACTION_UNSUPPORTED", `Unsupported Slack action: ${input.action}`);
+}
+
 async function executeGithubAction(input: ConnectorExecutionInput): Promise<Record<string, unknown>> {
   const credential = await getConnectorCredential({ tenantId: input.tenantId, connector: "github" });
   if (!credential) {
@@ -170,6 +219,68 @@ async function executeGithubAction(input: ConnectorExecutionInput): Promise<Reco
   throw lastError instanceof Error ? lastError : new Error("GitHub connector failed");
 }
 
+async function executeSlackAction(input: ConnectorExecutionInput): Promise<Record<string, unknown>> {
+  const credential = await getConnectorCredential({ tenantId: input.tenantId, connector: "slack" });
+  if (!credential) {
+    throw new AppError(400, "SLACK_CREDENTIALS_MISSING", "Slack credentials not configured for tenant");
+  }
+
+  const request = getSlackActionRequest({ action: input.action, payload: input.payload });
+
+  let lastError: unknown;
+  const attempts = CONNECTOR_RETRY_COUNT + 1;
+
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), CONNECTOR_TIMEOUT_MS);
+
+    try {
+      const response = await fetch(`${SLACK_API_BASE_URL}${request.path}`, {
+        method: request.method,
+        headers: {
+          authorization: `Bearer ${credential.token}`,
+          "content-type": "application/json"
+        },
+        body: JSON.stringify(request.body),
+        signal: controller.signal
+      });
+
+      if (!response.ok) {
+        const text = await response.text();
+        throw new AppError(502, "SLACK_API_ERROR", `Slack API failed (${response.status})`, {
+          status: response.status,
+          body: text
+        });
+      }
+
+      const data = (await response.json()) as { ok?: boolean; error?: string } & Record<string, unknown>;
+      if (!data.ok) {
+        throw new AppError(502, "SLACK_API_ERROR", `Slack API returned error: ${data.error ?? "unknown"}`);
+      }
+
+      return {
+        connector: input.connector,
+        action: input.action,
+        executedAt: nowIso(),
+        result: "success",
+        slack: {
+          status: response.status
+        },
+        data
+      };
+    } catch (error: unknown) {
+      lastError = error;
+      if (attempt < attempts - 1) {
+        await sleep(CONNECTOR_RETRY_BACKOFF_MS * (attempt + 1));
+      }
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new Error("Slack connector failed");
+}
+
 export function isSupportedConnector(connector: string): boolean {
   return SUPPORTED_CONNECTORS.has(connector);
 }
@@ -182,6 +293,8 @@ export async function executeConnectorAction(input: ConnectorExecutionInput): Pr
 
     if (input.connector === "github") {
       result = await executeGithubAction(input);
+    } else if (input.connector === "slack") {
+      result = await executeSlackAction(input);
     } else {
       result = {
         connector: input.connector,

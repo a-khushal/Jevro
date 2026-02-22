@@ -1,6 +1,6 @@
 export type Environment = "dev" | "staging" | "prod";
 export type Effect = "allow" | "deny" | "require_approval";
-export type ApprovalStatus = "pending" | "approved" | "rejected" | "consumed";
+export type ApprovalStatus = "pending" | "approved" | "rejected" | "consumed" | "expired";
 
 export interface AuditEvent {
   id: string;

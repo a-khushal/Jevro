@@ -165,6 +165,35 @@ export async function consumeApproval(approvalId: string) {
   });
 }
 
+export async function listExpiredPendingApprovals(input: { now: Date; limit?: number }) {
+  return prisma.approvalRequest.findMany({
+    where: {
+      status: "pending",
+      expiresAt: {
+        lte: input.now
+      }
+    },
+    orderBy: {
+      expiresAt: "asc"
+    },
+    take: input.limit ?? 100
+  });
+}
+
+export async function expireApproval(approvalId: string, now: Date) {
+  return prisma.approvalRequest.updateMany({
+    where: {
+      id: approvalId,
+      status: "pending"
+    },
+    data: {
+      status: "expired",
+      resolvedAt: now,
+      resolvedBy: "system:auto-expire"
+    }
+  });
+}
+
 export async function upsertConnectorCredential(input: {
   tenantId: string;
   connector: string;

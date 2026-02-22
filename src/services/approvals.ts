@@ -1,4 +1,11 @@
-import { consumeApproval as consumeApprovalRecord, createApproval, getApprovalById, resolveApproval as resolveApprovalRecord } from "../db";
+import {
+  consumeApproval as consumeApprovalRecord,
+  createApproval,
+  expireApproval,
+  getApprovalById,
+  listExpiredPendingApprovals,
+  resolveApproval as resolveApprovalRecord
+} from "../db";
 import { ApprovalRequest, ApprovalStatus } from "../types";
 
 const APPROVAL_TTL_MINUTES = 10;
@@ -31,6 +38,33 @@ function toApprovalRequest(record: {
     resolvedAt: record.resolvedAt ? record.resolvedAt.toISOString() : undefined,
     resolvedBy: record.resolvedBy ?? undefined
   };
+}
+
+export function isApprovalUsable(
+  approval: {
+    tenantId: string;
+    agentId: string;
+    connector: string;
+    action: string;
+    status: string;
+    expiresAt: Date;
+  },
+  input: {
+    tenantId: string;
+    agentId: string;
+    connector: string;
+    action: string;
+  }
+): boolean {
+  const isExpired = approval.expiresAt.getTime() <= Date.now();
+  return !(
+    approval.status !== "approved" ||
+    isExpired ||
+    approval.tenantId !== input.tenantId ||
+    approval.agentId !== input.agentId ||
+    approval.connector !== input.connector ||
+    approval.action !== input.action
+  );
 }
 
 export async function createApprovalRequest(input: {
@@ -81,15 +115,7 @@ export async function getUsableApproval(input: {
     return null;
   }
 
-  const isExpired = approval.expiresAt.getTime() <= Date.now();
-  if (
-    approval.status !== "approved" ||
-    isExpired ||
-    approval.tenantId !== input.tenantId ||
-    approval.agentId !== input.agentId ||
-    approval.connector !== input.connector ||
-    approval.action !== input.action
-  ) {
+  if (!isApprovalUsable(approval, input)) {
     return null;
   }
 
@@ -98,4 +124,29 @@ export async function getUsableApproval(input: {
 
 export async function consumeApproval(approvalId: string): Promise<void> {
   await consumeApprovalRecord(approvalId);
+}
+
+export async function expirePendingApprovals(batchSize = 100): Promise<ApprovalRequest[]> {
+  const now = new Date();
+  const pending = await listExpiredPendingApprovals({ now, limit: batchSize });
+  if (pending.length === 0) {
+    return [];
+  }
+
+  const expired: ApprovalRequest[] = [];
+  for (const approval of pending) {
+    const updated = await expireApproval(approval.id, now);
+    if (updated.count > 0) {
+      expired.push(
+        toApprovalRequest({
+          ...approval,
+          status: "expired",
+          resolvedAt: now,
+          resolvedBy: "system:auto-expire"
+        })
+      );
+    }
+  }
+
+  return expired;
 }

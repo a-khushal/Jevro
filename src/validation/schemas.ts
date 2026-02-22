@@ -2,7 +2,7 @@ import { z } from "zod";
 
 const environmentSchema = z.enum(["dev", "staging", "prod"]);
 const effectSchema = z.enum(["allow", "deny", "require_approval"]);
-const approvalStatusSchema = z.enum(["pending", "approved", "rejected", "consumed"]);
+const approvalStatusSchema = z.enum(["pending", "approved", "rejected", "consumed", "expired"]);
 
 export const createAgentSchema = z.object({
   tenantId: z.string().min(1),
@@ -70,6 +70,11 @@ export const approvalDecisionBodySchema = z.object({
 });
 
 export const upsertGithubCredentialSchema = z.object({
+  tenantId: z.string().min(1),
+  token: z.string().min(10)
+});
+
+export const upsertSlackCredentialSchema = z.object({
   tenantId: z.string().min(1),
   token: z.string().min(10)
 });
