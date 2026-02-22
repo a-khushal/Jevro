@@ -8,6 +8,20 @@ on:
 jobs:
   build-test:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: agent_auth
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d agent_auth"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
     env:
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/agent_auth?schema=public
       TOKEN_SECRET: local-dev-secret-change-me-123
@@ -27,6 +41,12 @@ jobs:
       - name: Generate Prisma client
         run: npm run prisma:generate
 
+      - name: Apply migrations
+        run: npm run prisma:deploy
+
+      - name: Check migration status
+        run: npm run prisma:migrate:status
+
       - name: Validate Prisma schema
         run: npm run prisma:validate
 
@@ -34,4 +54,8 @@ jobs:
         run: npm run build
 
       - name: Test
-        run: npm test
+        run: npm run test:db
+
+      - name: Load Test (non-blocking)
+        continue-on-error: true
+        run: node dist/index.js & sleep 4 && npm run loadtest

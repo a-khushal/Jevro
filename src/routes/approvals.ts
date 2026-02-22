@@ -10,7 +10,7 @@ import { approvalDecisionBodySchema, approvalDecisionParamsSchema, listApprovals
 export const approvalsRouter = Router();
 
 approvalsRouter.get("/approvals", validate({ query: listApprovalsQuerySchema }), async (req, res) => {
-  const tenantId = typeof req.query.tenantId === "string" ? req.query.tenantId : undefined;
+  const tenantId = req.query.tenantId as string;
   const agentId = typeof req.query.agentId === "string" ? req.query.agentId : undefined;
   const status = typeof req.query.status === "string" ? (req.query.status as ApprovalStatus) : undefined;
 
@@ -31,13 +31,14 @@ approvalsRouter.post(
   "/approvals/:approvalId/decision",
   validate({ params: approvalDecisionParamsSchema, body: approvalDecisionBodySchema }),
   async (req: Request<{ approvalId: string }>, res) => {
-    const body = req.body as { approverId: string; decision: "approved" | "rejected" };
+    const body = req.body as { tenantId: string; approverId: string; decision: "approved" | "rejected" };
 
-  const approval = await resolveApproval({
-    approvalId: req.params.approvalId,
-    approverId: body.approverId,
-    status: body.decision
-  });
+    const approval = await resolveApproval({
+      approvalId: req.params.approvalId,
+      tenantId: body.tenantId,
+      approverId: body.approverId,
+      status: body.decision
+    });
 
     if (!approval) {
       throw new AppError(404, "APPROVAL_NOT_FOUND", "pending approval not found");

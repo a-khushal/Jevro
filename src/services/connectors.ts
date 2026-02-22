@@ -5,6 +5,7 @@ import {
   CONNECTOR_RETRY_COUNT,
   CONNECTOR_TIMEOUT_MS,
   GITHUB_API_BASE_URL,
+  JIRA_API_BASE_URL,
   SLACK_API_BASE_URL
 } from "../config";
 import { getConnectorCredential } from "../db";
@@ -12,6 +13,20 @@ import { AppError } from "../errors";
 import { nowIso } from "../utils/time";
 
 const SUPPORTED_CONNECTORS = new Set(["slack", "github", "jira", "postgres"]);
+const ACTIONS_BY_CONNECTOR: Record<string, Set<string>> = {
+  github: new Set(["read_pr", "comment_pr"]),
+  slack: new Set(["post_message", "read_channel", "lookup_user"]),
+  jira: new Set(["read_issue"]),
+  postgres: new Set(["query_readonly"])
+};
+
+const REQUIRED_SCOPES_BY_ACTION: Record<string, string[]> = {
+  "github:read_pr": ["repo", "public_repo", "pull_request:read"],
+  "github:comment_pr": ["repo", "public_repo", "issues:write"],
+  "slack:post_message": ["chat:write"],
+  "slack:read_channel": ["channels:read", "groups:read"],
+  "slack:lookup_user": ["users:read"]
+};
 
 type ConnectorExecutionInput = {
   tenantId: string;
@@ -33,6 +48,15 @@ function sleep(ms: number): Promise<void> {
 
 function getCircuitKey(tenantId: string, connector: string): string {
   return `${tenantId}:${connector}`;
+}
+
+function getCircuitStatus(tenantId: string, connector: string): "closed" | "open" {
+  const state = circuitStateByKey.get(getCircuitKey(tenantId, connector));
+  if (!state) {
+    return "closed";
+  }
+
+  return state.openUntil > Date.now() ? "open" : "closed";
 }
 
 function assertCircuitClosed(tenantId: string, connector: string): void {
@@ -64,6 +88,36 @@ function markConnectorFailure(tenantId: string, connector: string): void {
 
 function getPayloadValue<T>(payload: Record<string, unknown>, key: string): T {
   return payload[key] as T;
+}
+
+function parseCommaSeparatedHeader(headerValue: string | null): string[] {
+  if (!headerValue) {
+    return [];
+  }
+
+  return headerValue
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean);
+}
+
+function assertActionScopes(input: { connector: string; action: string; grantedScopes: string[] }): void {
+  const key = `${input.connector}:${input.action}`;
+  const required = REQUIRED_SCOPES_BY_ACTION[key];
+  if (!required || required.length === 0) {
+    return;
+  }
+
+  if (input.grantedScopes.length === 0) {
+    return;
+  }
+
+  if (!required.some((scope) => input.grantedScopes.includes(scope))) {
+    throw new AppError(403, "CONNECTOR_SCOPE_MISSING", `Missing required scope for ${key}`, {
+      requiredScopes: required,
+      grantedScopes: input.grantedScopes
+    });
+  }
 }
 
 function getGithubActionRequest(input: {
@@ -153,6 +207,25 @@ function getSlackActionRequest(input: {
   throw new AppError(400, "SLACK_ACTION_UNSUPPORTED", `Unsupported Slack action: ${input.action}`);
 }
 
+function getJiraActionRequest(input: {
+  action: string;
+  payload: Record<string, unknown>;
+}): { method: "GET"; path: string } {
+  if (input.action === "read_issue") {
+    const issueKey = getPayloadValue<string>(input.payload, "issue_key");
+    if (!issueKey) {
+      throw new AppError(400, "JIRA_PAYLOAD_INVALID", "read_issue requires issue_key");
+    }
+
+    return {
+      method: "GET",
+      path: `/rest/api/3/issue/${encodeURIComponent(issueKey)}`
+    };
+  }
+
+  throw new AppError(400, "JIRA_ACTION_UNSUPPORTED", `Unsupported Jira action: ${input.action}`);
+}
+
 async function executeGithubAction(input: ConnectorExecutionInput): Promise<Record<string, unknown>> {
   const credential = await getConnectorCredential({ tenantId: input.tenantId, connector: "github" });
   if (!credential) {
@@ -183,15 +256,23 @@ async function executeGithubAction(input: ConnectorExecutionInput): Promise<Reco
 
       const requestId = response.headers.get("x-github-request-id") ?? "unknown";
       const rateRemaining = response.headers.get("x-ratelimit-remaining") ?? "unknown";
+      const grantedScopes = parseCommaSeparatedHeader(response.headers.get("x-oauth-scopes"));
 
       if (!response.ok) {
         const text = await response.text();
         throw new AppError(502, "GITHUB_API_ERROR", `GitHub API failed (${response.status})`, {
           status: response.status,
           requestId,
+          grantedScopes,
           body: text
         });
       }
+
+      assertActionScopes({
+        connector: "github",
+        action: input.action,
+        grantedScopes
+      });
 
       const data = (await response.json()) as Record<string, unknown>;
       return {
@@ -202,6 +283,7 @@ async function executeGithubAction(input: ConnectorExecutionInput): Promise<Reco
         github: {
           requestId,
           rateRemaining,
+          grantedScopes,
           status: response.status
         },
         data
@@ -244,19 +326,35 @@ async function executeSlackAction(input: ConnectorExecutionInput): Promise<Recor
         body: JSON.stringify(request.body),
         signal: controller.signal
       });
+      const grantedScopes = parseCommaSeparatedHeader(response.headers.get("x-oauth-scopes"));
 
       if (!response.ok) {
         const text = await response.text();
         throw new AppError(502, "SLACK_API_ERROR", `Slack API failed (${response.status})`, {
           status: response.status,
+          grantedScopes,
           body: text
         });
       }
 
       const data = (await response.json()) as { ok?: boolean; error?: string } & Record<string, unknown>;
       if (!data.ok) {
+        if (data.error === "missing_scope") {
+          throw new AppError(403, "CONNECTOR_SCOPE_MISSING", "Slack token missing required scope", {
+            connector: "slack",
+            action: input.action,
+            grantedScopes
+          });
+        }
+
         throw new AppError(502, "SLACK_API_ERROR", `Slack API returned error: ${data.error ?? "unknown"}`);
       }
+
+      assertActionScopes({
+        connector: "slack",
+        action: input.action,
+        grantedScopes
+      });
 
       return {
         connector: input.connector,
@@ -264,6 +362,7 @@ async function executeSlackAction(input: ConnectorExecutionInput): Promise<Recor
         executedAt: nowIso(),
         result: "success",
         slack: {
+          grantedScopes,
           status: response.status
         },
         data
@@ -281,8 +380,90 @@ async function executeSlackAction(input: ConnectorExecutionInput): Promise<Recor
   throw lastError instanceof Error ? lastError : new Error("Slack connector failed");
 }
 
+async function executeJiraAction(input: ConnectorExecutionInput): Promise<Record<string, unknown>> {
+  const credential = await getConnectorCredential({ tenantId: input.tenantId, connector: "jira" });
+  if (!credential) {
+    throw new AppError(400, "JIRA_CREDENTIALS_MISSING", "Jira credentials not configured for tenant");
+  }
+
+  const request = getJiraActionRequest({ action: input.action, payload: input.payload });
+
+  let lastError: unknown;
+  const attempts = CONNECTOR_RETRY_COUNT + 1;
+
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), CONNECTOR_TIMEOUT_MS);
+
+    try {
+      const response = await fetch(`${JIRA_API_BASE_URL}${request.path}`, {
+        method: request.method,
+        headers: {
+          authorization: `Bearer ${credential.token}`,
+          accept: "application/json"
+        },
+        signal: controller.signal
+      });
+
+      if (!response.ok) {
+        const text = await response.text();
+        throw new AppError(502, "JIRA_API_ERROR", `Jira API failed (${response.status})`, {
+          status: response.status,
+          body: text
+        });
+      }
+
+      const data = (await response.json()) as Record<string, unknown>;
+      return {
+        connector: input.connector,
+        action: input.action,
+        executedAt: nowIso(),
+        result: "success",
+        jira: {
+          status: response.status
+        },
+        data
+      };
+    } catch (error: unknown) {
+      lastError = error;
+      if (attempt < attempts - 1) {
+        await sleep(CONNECTOR_RETRY_BACKOFF_MS * (attempt + 1));
+      }
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new Error("Jira connector failed");
+}
+
 export function isSupportedConnector(connector: string): boolean {
   return SUPPORTED_CONNECTORS.has(connector);
+}
+
+export function isConnectorActionSupported(connector: string, action: string): boolean {
+  const supportedActions = ACTIONS_BY_CONNECTOR[connector];
+  return !!supportedActions && supportedActions.has(action);
+}
+
+export function getSupportedActionsForConnector(connector: string): string[] {
+  return [...(ACTIONS_BY_CONNECTOR[connector] ?? new Set<string>())];
+}
+
+export async function getConnectorHealthForTenant(input: {
+  tenantId: string;
+  connector: string;
+}): Promise<{ connector: string; configured: boolean; circuit: "open" | "closed"; supportedActions: string[] }> {
+  const configured = input.connector === "postgres"
+    ? true
+    : !!(await getConnectorCredential({ tenantId: input.tenantId, connector: input.connector }));
+
+  return {
+    connector: input.connector,
+    configured,
+    circuit: getCircuitStatus(input.tenantId, input.connector),
+    supportedActions: getSupportedActionsForConnector(input.connector)
+  };
 }
 
 export async function executeConnectorAction(input: ConnectorExecutionInput): Promise<Record<string, unknown>> {
@@ -295,6 +476,8 @@ export async function executeConnectorAction(input: ConnectorExecutionInput): Pr
       result = await executeGithubAction(input);
     } else if (input.connector === "slack") {
       result = await executeSlackAction(input);
+    } else if (input.connector === "jira") {
+      result = await executeJiraAction(input);
     } else {
       result = {
         connector: input.connector,

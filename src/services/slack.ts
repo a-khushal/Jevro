@@ -1,5 +1,5 @@
 import { createHmac, timingSafeEqual } from "crypto";
-import { SLACK_APPROVAL_CHANNEL, SLACK_BOT_TOKEN, SLACK_SIGNING_SECRET } from "../config";
+import { SLACK_API_BASE_URL, SLACK_APPROVAL_CHANNEL, SLACK_BOT_TOKEN, SLACK_SIGNING_SECRET } from "../config";
 import { AppError } from "../errors";
 
 type SlackInteractivityAction = {
@@ -39,7 +39,7 @@ export async function sendSlackApprovalRequest(input: {
 }): Promise<{ channel: string; ts: string }> {
   assertSlackOutboundConfigured();
 
-  const response = await fetch("https://slack.com/api/chat.postMessage", {
+  const response = await fetch(`${SLACK_API_BASE_URL}/chat.postMessage`, {
     method: "POST",
     headers: {
       "content-type": "application/json",

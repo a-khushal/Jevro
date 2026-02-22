@@ -20,7 +20,7 @@ export const createPolicySchema = z.object({
 });
 
 export const listPoliciesQuerySchema = z.object({
-  tenantId: z.string().min(1).optional(),
+  tenantId: z.string().min(1),
   agentId: z.string().min(1).optional()
 });
 
@@ -49,13 +49,13 @@ export const proxyBodySchema = z.object({
 });
 
 export const listAuditEventsQuerySchema = z.object({
-  tenantId: z.string().min(1).optional(),
+  tenantId: z.string().min(1),
   agentId: z.string().min(1).optional(),
   eventType: z.string().min(1).optional()
 });
 
 export const listApprovalsQuerySchema = z.object({
-  tenantId: z.string().min(1).optional(),
+  tenantId: z.string().min(1),
   agentId: z.string().min(1).optional(),
   status: approvalStatusSchema.optional()
 });
@@ -65,6 +65,7 @@ export const approvalDecisionParamsSchema = z.object({
 });
 
 export const approvalDecisionBodySchema = z.object({
+  tenantId: z.string().min(1),
   approverId: z.string().min(1),
   decision: z.enum(["approved", "rejected"])
 });
@@ -77,4 +78,13 @@ export const upsertGithubCredentialSchema = z.object({
 export const upsertSlackCredentialSchema = z.object({
   tenantId: z.string().min(1),
   token: z.string().min(10)
+});
+
+export const upsertJiraCredentialSchema = z.object({
+  tenantId: z.string().min(1),
+  token: z.string().min(10)
+});
+
+export const connectorHealthQuerySchema = z.object({
+  tenantId: z.string().min(1)
 });

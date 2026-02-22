@@ -6,7 +6,7 @@ import { listAuditEventsQuerySchema } from "../validation/schemas";
 export const auditRouter = Router();
 
 auditRouter.get("/audit-events", validate({ query: listAuditEventsQuerySchema }), async (_req, res) => {
-  const tenantId = typeof _req.query.tenantId === "string" ? _req.query.tenantId : undefined;
+  const tenantId = _req.query.tenantId as string;
   const agentId = typeof _req.query.agentId === "string" ? _req.query.agentId : undefined;
   const eventType = typeof _req.query.eventType === "string" ? _req.query.eventType : undefined;
 

@@ -37,7 +37,20 @@ Run tests:
 npm test
 ```
 
+Run full test suite with local ephemeral Postgres (recommended for integration/e2e):
+
+```bash
+npm run test:with-db
+```
+
+Direct DB-backed test run (requires a reachable Postgres in `DATABASE_URL`):
+
+```bash
+npm run test:db
+```
+
 Default server: `http://localhost:8080`
+API version prefix: `/v1` (legacy unversioned routes remain available)
 
 Environment templates for deployment are included in `.env.staging.example` and `.env.production.example`.
 
@@ -65,6 +78,7 @@ Environment templates for deployment are included in `.env.staging.example` and 
 - `CIRCUIT_BREAKER_FAILURE_THRESHOLD` (default: `5`)
 - `CIRCUIT_BREAKER_OPEN_MS` (default: `30000`)
 - `GITHUB_API_BASE_URL` (default: `https://api.github.com`)
+- `JIRA_API_BASE_URL` (default: `https://your-domain.atlassian.net`)
 - `SLACK_API_BASE_URL` (default: `https://slack.com/api`)
 - `SLACK_BOT_TOKEN` (required for approval notifications)
 - `SLACK_SIGNING_SECRET` (required for Slack callbacks)
@@ -76,7 +90,7 @@ Environment templates for deployment are included in `.env.staging.example` and 
 Optional: configure GitHub token for tenant before GitHub proxy actions.
 
 ```bash
-curl -s -X POST http://localhost:8080/connectors/github/credentials \
+curl -s -X POST http://localhost:8080/v1/connectors/github/credentials \
   -H "content-type: application/json" \
   -d '{"tenantId":"acme","token":"ghp_xxx"}'
 ```
@@ -84,15 +98,23 @@ curl -s -X POST http://localhost:8080/connectors/github/credentials \
 Optional: configure Slack token for tenant before Slack proxy actions.
 
 ```bash
-curl -s -X POST http://localhost:8080/connectors/slack/credentials \
+curl -s -X POST http://localhost:8080/v1/connectors/slack/credentials \
   -H "content-type: application/json" \
   -d '{"tenantId":"acme","token":"xoxb-xxx"}'
+```
+
+Optional: configure Jira token for tenant before Jira proxy actions.
+
+```bash
+curl -s -X POST http://localhost:8080/v1/connectors/jira/credentials \
+  -H "content-type: application/json" \
+  -d '{"tenantId":"acme","token":"jira_xxx"}'
 ```
 
 1) Create an agent
 
 ```bash
-curl -s -X POST http://localhost:8080/agents \
+curl -s -X POST http://localhost:8080/v1/agents \
   -H "content-type: application/json" \
   -d '{"tenantId":"acme","name":"release-agent","environment":"prod"}'
 ```
@@ -100,7 +122,7 @@ curl -s -X POST http://localhost:8080/agents \
 2) Create policy (allow)
 
 ```bash
-curl -s -X POST http://localhost:8080/policies \
+curl -s -X POST http://localhost:8080/v1/policies \
   -H "content-type: application/json" \
   -d '{"tenantId":"acme","agentId":"<agentId>","connector":"github","actions":["read_pr"],"environment":"prod","effect":"allow"}'
 ```
@@ -108,7 +130,7 @@ curl -s -X POST http://localhost:8080/policies \
 3) Mint token
 
 ```bash
-curl -s -X POST http://localhost:8080/tokens/mint \
+curl -s -X POST http://localhost:8080/v1/tokens/mint \
   -H "content-type: application/json" \
   -d '{"tenantId":"acme","agentId":"<agentId>"}'
 ```
@@ -116,19 +138,19 @@ curl -s -X POST http://localhost:8080/tokens/mint \
 4) Proxy call
 
 ```bash
-curl -s -X POST http://localhost:8080/proxy/github/read_pr \
+curl -s -X POST http://localhost:8080/v1/proxy/github/read_pr \
   -H "content-type: application/json" \
   -H "authorization: Bearer <token>" \
-  -d '{"payload":{"owner":"acme","repo":"api","pull_number":42}}'
+  -d '{"environment":"prod","payload":{"owner":"acme","repo":"api","pull_number":42}}'
 ```
 
 GitHub comment example:
 
 ```bash
-curl -s -X POST http://localhost:8080/proxy/github/comment_pr \
+curl -s -X POST http://localhost:8080/v1/proxy/github/comment_pr \
   -H "content-type: application/json" \
   -H "authorization: Bearer <token>" \
-  -d '{"payload":{"owner":"acme","repo":"api","issue_number":42,"body":"Looks good"}}'
+  -d '{"environment":"prod","payload":{"owner":"acme","repo":"api","issue_number":42,"body":"Looks good"}}'
 ```
 
 ## Approval flow
@@ -142,23 +164,45 @@ For production approval flow, configure your Slack app interactivity request URL
 1) Resolve approval
 
 ```bash
-curl -s -X POST http://localhost:8080/approvals/<approvalId>/decision \
+curl -s -X POST http://localhost:8080/v1/approvals/<approvalId>/decision \
   -H "content-type: application/json" \
-  -d '{"approverId":"sec-lead-1","decision":"approved"}'
+  -d '{"tenantId":"acme","approverId":"sec-lead-1","decision":"approved"}'
 ```
 
 2) Replay proxy call with `approvalId`
 
 ```bash
-curl -s -X POST http://localhost:8080/proxy/slack/post_message \
+curl -s -X POST http://localhost:8080/v1/proxy/slack/post_message \
   -H "content-type: application/json" \
   -H "authorization: Bearer <token>" \
-  -d '{"approvalId":"<approvalId>","payload":{"channel":"#ops","text":"deploy complete"}}'
+  -d '{"approvalId":"<approvalId>","environment":"prod","payload":{"channel":"#ops","text":"deploy complete"}}'
 ```
 
 ## Query endpoints
 
-- `GET /health`
-- `GET /policies?tenantId=acme&agentId=<agentId>`
-- `GET /audit-events?tenantId=acme&agentId=<agentId>&eventType=proxy.request`
-- `GET /approvals?tenantId=acme&status=pending`
+- `GET /v1/health`
+- `GET /v1/policies?tenantId=acme&agentId=<agentId>`
+- `GET /v1/audit-events?tenantId=acme&agentId=<agentId>&eventType=proxy.request`
+- `GET /v1/approvals?tenantId=acme&status=pending`
+- `GET /v1/connectors/health?tenantId=acme`
+
+## Contract and examples
+
+- OpenAPI: `openapi/openapi.yaml`
+- Curl quickstart: `examples/curl/quickstart.sh`
+- Postman collection: `examples/postman/okta-for-agents-mvp.postman_collection.json`
+
+## Load testing
+
+```bash
+npm run build
+npm start
+npm run loadtest
+```
+
+## Operations docs
+
+- Backup/restore: `docs/operations/backup-restore.md`
+- Migration rollout/rollback: `docs/operations/migration-rollout.md`
+- Connector outage runbook: `docs/operations/connectors-runbook.md`
+- SLOs and alert thresholds: `docs/operations/slo-alerts.md`

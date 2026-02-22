@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { TOKEN_TTL_SECONDS } from "../config";
-import { getAgentById } from "../db";
+import { getAgentByTenantAndId } from "../db";
 import { AppError } from "../errors";
 import { validate } from "../middleware/validate";
 import { addAuditEvent } from "../services/audit";
@@ -16,9 +16,9 @@ export const tokensRouter = Router();
 
 tokensRouter.post("/tokens/mint", validate({ body: mintTokenSchema }), async (req, res) => {
   const body = req.body as { tenantId: string; agentId: string };
-  const agent = body.agentId ? await getAgentById(body.agentId) : undefined;
+  const agent = await getAgentByTenantAndId({ tenantId: body.tenantId, agentId: body.agentId });
 
-  if (!agent || agent.tenantId !== body.tenantId) {
+  if (!agent) {
     throw new AppError(400, "INVALID_AGENT", "valid tenantId and agentId are required");
   }
 

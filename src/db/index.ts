@@ -16,6 +16,15 @@ export async function getAgentById(agentId: string) {
   return prisma.agent.findUnique({ where: { id: agentId } });
 }
 
+export async function getAgentByTenantAndId(input: { tenantId: string; agentId: string }) {
+  return prisma.agent.findFirst({
+    where: {
+      id: input.agentId,
+      tenantId: input.tenantId
+    }
+  });
+}
+
 export async function createPolicy(input: {
   tenantId: string;
   agentId: string;
@@ -133,12 +142,14 @@ export async function listApprovals(filter: { tenantId?: string; agentId?: strin
 
 export async function resolveApproval(input: {
   approvalId: string;
+  tenantId?: string;
   approverId: string;
   status: Extract<ApprovalStatus, "approved" | "rejected">;
 }) {
   return prisma.approvalRequest.updateMany({
     where: {
       id: input.approvalId,
+      tenantId: input.tenantId,
       status: "pending"
     },
     data: {
@@ -224,6 +235,14 @@ export async function getConnectorCredential(input: { tenantId: string; connecto
         tenantId: input.tenantId,
         connector: input.connector
       }
+    }
+  });
+}
+
+export async function listConnectorCredentialsByTenant(tenantId: string) {
+  return prisma.connectorCredential.findMany({
+    where: {
+      tenantId
     }
   });
 }

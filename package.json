@@ -12,7 +12,11 @@
     "prisma:deploy": "prisma migrate deploy",
     "prisma:studio": "prisma studio",
     "prisma:validate": "prisma validate",
-    "test": "tsx --test src/**/*.test.ts"
+    "prisma:migrate:status": "prisma migrate status",
+    "loadtest": "node scripts/loadtest.js",
+    "test": "tsx --test src/**/*.test.ts",
+    "test:db": "REQUIRE_DB_TESTS=1 tsx --test --test-concurrency=1 src/**/*.test.ts",
+    "test:with-db": "bash scripts/test-with-db.sh"
   },
   "keywords": [],
   "author": "",
@@ -22,6 +26,9 @@
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
     "@types/node": "^24.6.0",
+    "@types/supertest": "^6.0.3",
+    "autocannon": "^8.0.0",
+    "supertest": "^7.1.4",
     "tsx": "^4.20.6",
     "typescript": "^5.9.3"
   },

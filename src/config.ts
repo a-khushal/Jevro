@@ -25,6 +25,7 @@ const envSchema = z.object({
   CIRCUIT_BREAKER_FAILURE_THRESHOLD: z.coerce.number().int().positive().default(5),
   CIRCUIT_BREAKER_OPEN_MS: z.coerce.number().int().positive().default(30000),
   GITHUB_API_BASE_URL: z.string().url().default("https://api.github.com"),
+  JIRA_API_BASE_URL: z.string().url().default("https://your-domain.atlassian.net"),
   SLACK_API_BASE_URL: z.string().url().default("https://slack.com/api"),
   SLACK_BOT_TOKEN: z.string().optional(),
   SLACK_SIGNING_SECRET: z.string().optional(),
@@ -60,6 +61,7 @@ export const CONNECTOR_RETRY_BACKOFF_MS = env.CONNECTOR_RETRY_BACKOFF_MS;
 export const CIRCUIT_BREAKER_FAILURE_THRESHOLD = env.CIRCUIT_BREAKER_FAILURE_THRESHOLD;
 export const CIRCUIT_BREAKER_OPEN_MS = env.CIRCUIT_BREAKER_OPEN_MS;
 export const GITHUB_API_BASE_URL = env.GITHUB_API_BASE_URL;
+export const JIRA_API_BASE_URL = env.JIRA_API_BASE_URL;
 export const SLACK_API_BASE_URL = env.SLACK_API_BASE_URL;
 export const CORS_ORIGINS = env.CORS_ORIGINS.split(",").map((value) => value.trim()).filter(Boolean);
 export const SLACK_BOT_TOKEN = env.SLACK_BOT_TOKEN;

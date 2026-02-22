@@ -87,6 +87,7 @@ export async function createApprovalRequest(input: {
 
 export async function resolveApproval(input: {
   approvalId: string;
+  tenantId?: string;
   approverId: string;
   status: Extract<ApprovalStatus, "approved" | "rejected">;
 }): Promise<ApprovalRequest | null> {

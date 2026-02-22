@@ -1,14 +1,16 @@
 import { Router } from "express";
-import { createPolicy, getAgentById, listPolicies } from "../db";
+import { createPolicy, getAgentByTenantAndId, listPolicies } from "../db";
+import { AppError } from "../errors";
 import { validate } from "../middleware/validate";
 import { addAuditEvent } from "../services/audit";
+import { isConnectorActionSupported, isSupportedConnector } from "../services/connectors";
 import { Effect, Environment } from "../types";
 import { createPolicySchema, listPoliciesQuerySchema } from "../validation/schemas";
 
 export const policiesRouter = Router();
 
 policiesRouter.get("/policies", validate({ query: listPoliciesQuerySchema }), async (req, res) => {
-  const tenantId = typeof req.query.tenantId === "string" ? req.query.tenantId : undefined;
+  const tenantId = req.query.tenantId as string;
   const agentId = typeof req.query.agentId === "string" ? req.query.agentId : undefined;
 
   const result = await listPolicies({ tenantId, agentId });
@@ -28,10 +30,23 @@ policiesRouter.post("/policies", validate({ body: createPolicySchema }), async (
     effect: Effect;
   };
 
-  const agent = await getAgentById(body.agentId);
-  if (!agent || agent.tenantId !== body.tenantId) {
+  if (!isSupportedConnector(body.connector)) {
+    throw new AppError(400, "UNSUPPORTED_CONNECTOR", "Unsupported connector");
+  }
+
+  const unsupportedAction = body.actions.find((action) => !isConnectorActionSupported(body.connector, action));
+  if (unsupportedAction) {
+    throw new AppError(400, "UNSUPPORTED_CONNECTOR_ACTION", `Unsupported action for ${body.connector}: ${unsupportedAction}`);
+  }
+
+  const agent = await getAgentByTenantAndId({ tenantId: body.tenantId, agentId: body.agentId });
+  if (!agent) {
     res.status(404).json({ error: "agent not found" });
     return;
+  }
+
+  if (agent.environment !== body.environment) {
+    throw new AppError(400, "AGENT_ENVIRONMENT_MISMATCH", "Policy environment must match agent environment");
   }
 
   const policy = await createPolicy({

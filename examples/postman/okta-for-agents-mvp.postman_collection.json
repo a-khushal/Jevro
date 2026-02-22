@@ -1,0 +1,65 @@
+{
+  "info": {
+    "name": "Okta for Agents MVP",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8080/v1" },
+    { "key": "tenantId", "value": "acme" },
+    { "key": "agentId", "value": "" },
+    { "key": "token", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "Create Agent",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "content-type", "value": "application/json" }],
+        "url": "{{baseUrl}}/agents",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"tenantId\": \"{{tenantId}}\",\n  \"name\": \"release-agent\",\n  \"environment\": \"prod\"\n}"
+        }
+      }
+    },
+    {
+      "name": "Create Policy",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "content-type", "value": "application/json" }],
+        "url": "{{baseUrl}}/policies",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"tenantId\": \"{{tenantId}}\",\n  \"agentId\": \"{{agentId}}\",\n  \"connector\": \"github\",\n  \"actions\": [\"read_pr\"],\n  \"environment\": \"prod\",\n  \"effect\": \"allow\"\n}"
+        }
+      }
+    },
+    {
+      "name": "Mint Token",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "content-type", "value": "application/json" }],
+        "url": "{{baseUrl}}/tokens/mint",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"tenantId\": \"{{tenantId}}\",\n  \"agentId\": \"{{agentId}}\"\n}"
+        }
+      }
+    },
+    {
+      "name": "Proxy GitHub Read PR",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "content-type", "value": "application/json" },
+          { "key": "authorization", "value": "Bearer {{token}}" }
+        ],
+        "url": "{{baseUrl}}/proxy/github/read_pr",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"environment\": \"prod\",\n  \"payload\": {\n    \"owner\": \"acme\",\n    \"repo\": \"api\",\n    \"pull_number\": 42\n  }\n}"
+        }
+      }
+    }
+  ]
+}

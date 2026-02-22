@@ -54,6 +54,11 @@ proxyRouter.post<{ connector: string; action: string }>(
       environment?: Environment;
       approvalId?: string;
     };
+
+    if (body.environment && body.environment !== claims.env) {
+      throw new AppError(403, "TOKEN_ENV_MISMATCH", "Token environment does not match requested environment");
+    }
+
     const environment = body.environment ?? claims.env;
     const decision = await authorize({
       tenantId: claims.tenantId,

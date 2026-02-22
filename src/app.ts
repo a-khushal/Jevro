@@ -44,16 +44,23 @@ app.use(
 
 app.use(express.json({ limit: JSON_BODY_LIMIT }));
 
-app.use(healthRouter);
-app.use(agentsRouter);
-app.use(policiesRouter);
-app.use(tokensRouter);
-app.use(authorizeRouter);
-app.use(proxyRouter);
-app.use(auditRouter);
-app.use(approvalsRouter);
-app.use(slackRouter);
-app.use(connectorsRouter);
+const apiRouters = [
+  healthRouter,
+  agentsRouter,
+  policiesRouter,
+  tokensRouter,
+  authorizeRouter,
+  proxyRouter,
+  auditRouter,
+  approvalsRouter,
+  slackRouter,
+  connectorsRouter
+];
+
+for (const router of apiRouters) {
+  app.use(router);
+  app.use("/v1", router);
+}
 
 app.use(notFoundHandler);
 app.use(errorHandler);

@@ -1,0 +1,223 @@
+openapi: 3.1.0
+info:
+  title: Okta for Agents MVP API
+  version: 1.0.0
+servers:
+  - url: http://localhost:8080/v1
+paths:
+  /health:
+    get:
+      summary: Service health check
+      responses:
+        "200":
+          description: Healthy
+  /agents:
+    post:
+      summary: Create an agent
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [tenantId, name]
+              properties:
+                tenantId: { type: string }
+                name: { type: string }
+                environment: { type: string, enum: [dev, staging, prod] }
+      responses:
+        "201":
+          description: Agent created
+  /policies:
+    get:
+      summary: List policies for a tenant
+      parameters:
+        - in: query
+          name: tenantId
+          required: true
+          schema: { type: string }
+        - in: query
+          name: agentId
+          required: false
+          schema: { type: string }
+      responses:
+        "200":
+          description: Policies list
+    post:
+      summary: Create policy
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [tenantId, agentId, connector, actions, environment, effect]
+              properties:
+                tenantId: { type: string }
+                agentId: { type: string }
+                connector: { type: string }
+                actions:
+                  type: array
+                  items: { type: string }
+                environment: { type: string, enum: [dev, staging, prod] }
+                effect: { type: string, enum: [allow, deny, require_approval] }
+      responses:
+        "201":
+          description: Policy created
+  /tokens/mint:
+    post:
+      summary: Mint short-lived token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [tenantId, agentId]
+              properties:
+                tenantId: { type: string }
+                agentId: { type: string }
+      responses:
+        "200":
+          description: Token minted
+  /authorize:
+    post:
+      summary: Evaluate policy decision
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [tenantId, agentId, connector, action, environment]
+              properties:
+                tenantId: { type: string }
+                agentId: { type: string }
+                connector: { type: string }
+                action: { type: string }
+                environment: { type: string, enum: [dev, staging, prod] }
+      responses:
+        "200":
+          description: Authorization decision
+  /proxy/{connector}/{action}:
+    post:
+      summary: Execute policy-enforced connector action
+      parameters:
+        - in: path
+          name: connector
+          required: true
+          schema: { type: string }
+        - in: path
+          name: action
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                environment: { type: string, enum: [dev, staging, prod] }
+                approvalId: { type: string }
+                payload: { type: object }
+      responses:
+        "200":
+          description: Request allowed
+        "202":
+          description: Approval required
+        "403":
+          description: Request denied
+  /approvals:
+    get:
+      summary: List approvals for a tenant
+      parameters:
+        - in: query
+          name: tenantId
+          required: true
+          schema: { type: string }
+        - in: query
+          name: agentId
+          required: false
+          schema: { type: string }
+        - in: query
+          name: status
+          required: false
+          schema:
+            type: string
+            enum: [pending, approved, rejected, consumed, expired]
+      responses:
+        "200":
+          description: Approvals list
+  /approvals/{approvalId}/decision:
+    post:
+      summary: Resolve approval
+      parameters:
+        - in: path
+          name: approvalId
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [tenantId, approverId, decision]
+              properties:
+                tenantId: { type: string }
+                approverId: { type: string }
+                decision:
+                  type: string
+                  enum: [approved, rejected]
+      responses:
+        "200":
+          description: Approval resolved
+  /audit-events:
+    get:
+      summary: List audit events for a tenant
+      parameters:
+        - in: query
+          name: tenantId
+          required: true
+          schema: { type: string }
+        - in: query
+          name: agentId
+          required: false
+          schema: { type: string }
+        - in: query
+          name: eventType
+          required: false
+          schema: { type: string }
+      responses:
+        "200":
+          description: Audit events list
+  /connectors/health:
+    get:
+      summary: Get connector health by tenant
+      parameters:
+        - in: query
+          name: tenantId
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Connector health details
+  /connectors/github/credentials:
+    post:
+      summary: Set tenant GitHub credential
+      responses:
+        "200":
+          description: Credential saved
+  /connectors/slack/credentials:
+    post:
+      summary: Set tenant Slack credential
+      responses:
+        "200":
+          description: Credential saved
+  /connectors/jira/credentials:
+    post:
+      summary: Set tenant Jira credential
+      responses:
+        "200":
+          description: Credential saved
