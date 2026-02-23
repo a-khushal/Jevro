@@ -12,6 +12,7 @@ model Agent {
   tenantId    String
   name        String
   environment String
+  principalType String @default("agent")
   createdAt   DateTime          @default(now())
   deletedAt   DateTime?
   policies    Policy[]
@@ -30,6 +31,9 @@ model Policy {
   actions     String[]
   environment String
   effect      String
+  priority    Int      @default(100)
+  dryRun      Boolean  @default(false)
+  templateId  String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   deletedAt   DateTime?
@@ -38,6 +42,7 @@ model Policy {
   @@index([tenantId])
   @@index([agentId])
   @@index([tenantId, agentId, connector, environment])
+  @@index([tenantId, priority])
   @@index([tenantId, deletedAt])
 }
 
@@ -66,6 +71,9 @@ model ApprovalRequest {
   connector  String
   action     String
   status     String
+  requiredApprovals Int      @default(1)
+  approvedBy String[]
+  riskLevel  String   @default("low")
   requestedAt DateTime
   expiresAt  DateTime
   resolvedAt DateTime?
@@ -112,5 +120,30 @@ model RevokedToken {
   expiresAt DateTime
 
   @@index([tenantId])
+  @@index([expiresAt])
+}
+
+model TenantConfig {
+  id              String   @id @default(uuid())
+  tenantId        String   @unique
+  tokenTtlSeconds Int?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model IdempotencyRecord {
+  id             String   @id @default(uuid())
+  tenantId       String
+  agentId        String
+  connector      String
+  action         String
+  idempotencyKey String
+  requestHash    String
+  responseStatus Int
+  responseBody   Json
+  createdAt      DateTime @default(now())
+  expiresAt      DateTime
+
+  @@unique([tenantId, agentId, connector, action, idempotencyKey])
   @@index([expiresAt])
 }

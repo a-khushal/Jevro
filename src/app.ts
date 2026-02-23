@@ -1,4 +1,5 @@
 import cors from "cors";
+import { randomUUID } from "crypto";
 import express from "express";
 import rateLimit from "express-rate-limit";
 import helmet from "helmet";
@@ -14,7 +15,11 @@ import { healthRouter } from "./routes/health";
 import { policiesRouter } from "./routes/policies";
 import { proxyRouter } from "./routes/proxy";
 import { slackRouter } from "./routes/slack";
+import { tenantsRouter } from "./routes/tenants";
 import { tokensRouter } from "./routes/tokens";
+import { logStructured } from "./services/logger";
+import { recordHttpMetric } from "./services/metrics";
+import { runWithRequestContext } from "./services/requestContext";
 
 export const app = express();
 
@@ -45,6 +50,39 @@ app.use(
 
 app.use(express.json({ limit: JSON_BODY_LIMIT }));
 
+app.use((req, res, next) => {
+  const requestIdHeader = req.header("x-request-id");
+  const requestId = requestIdHeader && requestIdHeader.trim() ? requestIdHeader : randomUUID();
+  const start = Date.now();
+
+  res.setHeader("x-request-id", requestId);
+
+  runWithRequestContext(requestId, () => {
+    res.on("finish", () => {
+      const durationMs = Date.now() - start;
+
+      recordHttpMetric({
+        method: req.method,
+        path: req.path,
+        statusCode: res.statusCode,
+        durationMs
+      });
+
+      logStructured("http.request", {
+        requestId,
+        method: req.method,
+        path: req.path,
+        statusCode: res.statusCode,
+        durationMs,
+        tenantId: (req.body as { tenantId?: string } | undefined)?.tenantId ??
+          (typeof req.query.tenantId === "string" ? req.query.tenantId : undefined)
+      });
+    });
+
+    next();
+  });
+});
+
 const apiRouters = [
   healthRouter,
   agentsRouter,
@@ -55,6 +93,7 @@ const apiRouters = [
   auditRouter,
   approvalsRouter,
   slackRouter,
+  tenantsRouter,
   connectorsRouter
 ];
 

@@ -68,6 +68,8 @@ Environment templates for deployment are included in `.env.staging.example` and 
 - `TOKEN_SECRET` (default: `local-dev-secret-change-me`)
 - `TOKEN_DEFAULT_KID` (default: `local-dev-kid-1`)
 - `TOKEN_TTL_SECONDS` (default: `600`)
+- `TOKEN_TTL_MIN_SECONDS` (default: `60`)
+- `TOKEN_TTL_MAX_SECONDS` (default: `86400`)
 - `CORS_ORIGINS` (default: `http://localhost:3000,http://localhost:5173`)
 - `JSON_BODY_LIMIT` (default: `100kb`)
 - `RATE_LIMIT_WINDOW_MS` (default: `60000`)
@@ -88,6 +90,11 @@ Environment templates for deployment are included in `.env.staging.example` and 
 - `GITHUB_API_BASE_URL` (default: `https://api.github.com`)
 - `JIRA_API_BASE_URL` (default: `https://your-domain.atlassian.net`)
 - `SLACK_API_BASE_URL` (default: `https://slack.com/api`)
+- `POSTGRES_CONNECTOR_URL` (defaults to `DATABASE_URL`)
+- `POSTGRES_READONLY_MAX_ROWS` (default: `100`)
+- `IDEMPOTENCY_TTL_SECONDS` (default: `3600`)
+- `HIGH_RISK_REQUIRED_APPROVALS` (default: `2`)
+- `RISK_REQUIRE_APPROVAL_LEVELS` (default: `high,critical`)
 - `SLACK_BOT_TOKEN` (required for approval notifications)
 - `SLACK_SIGNING_SECRET` (required for Slack callbacks)
 - `SLACK_APPROVAL_CHANNEL` (required for approval notifications)
@@ -112,6 +119,7 @@ Environment templates for deployment are included in `.env.staging.example` and 
 - Activate key: `POST /v1/tokens/keys/:kid/activate`
 - List key metadata: `GET /v1/tokens/keys`
 - Revoke token by JWT: `POST /v1/tokens/revoke`
+- Tenant token TTL override: `GET /v1/tenants/config`, `POST /v1/tenants/config`
 
 ## API flow
 
@@ -209,12 +217,17 @@ curl -s -X POST http://localhost:8080/v1/proxy/slack/post_message \
 ## Query endpoints
 
 - `GET /v1/health`
+- `GET /v1/metrics`
+- `GET /v1/metrics/summary`
 - `GET /v1/policies?tenantId=acme&agentId=<agentId>`
+- `GET /v1/policies/templates`
+- `POST /v1/policies/simulate`
 - `PATCH /v1/policies/:policyId` (soft lifecycle update)
 - `DELETE /v1/policies/:policyId` (soft delete)
 - `GET /v1/audit-events?tenantId=acme&agentId=<agentId>&eventType=proxy.request`
 - `GET /v1/approvals?tenantId=acme&status=pending`
 - `GET /v1/connectors/health?tenantId=acme`
+- `POST /v1/service-accounts` (machine principal)
 
 ## Contract and examples
 
@@ -251,6 +264,8 @@ npm run loadtest
 - SLOs and alert thresholds: `docs/operations/slo-alerts.md`
 - Token key rotation runbook: `docs/operations/token-key-rotation.md`
 - Tenant isolation audit sweep: `docs/security/tenant-isolation-audit.md`
+- Threat model + abuse cases: `docs/security/threat-model.md`
+- Service account model: `docs/security/service-account-model.md`
 
 ## Error troubleshooting
 

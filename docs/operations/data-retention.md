@@ -13,6 +13,7 @@ The background retention job purges:
 1. `AuditEvent` rows older than audit retention cutoff.
 2. `ApprovalRequest` rows in terminal states (`approved`, `rejected`, `consumed`, `expired`) older than approval retention cutoff.
 3. Expired entries from `RevokedToken`.
+4. Expired entries from `IdempotencyRecord`.
 
 ## Verification
 

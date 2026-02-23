@@ -1,11 +1,11 @@
 import { Router } from "express";
-import { TOKEN_TTL_SECONDS } from "../config";
-import { activateSigningKey, getAgentByTenantAndId, listSigningKeysMetadata } from "../db";
+import { TOKEN_TTL_MAX_SECONDS, TOKEN_TTL_MIN_SECONDS, TOKEN_TTL_SECONDS } from "../config";
+import { activateSigningKey, getAgentByTenantAndId, getTenantConfig, listSigningKeysMetadata } from "../db";
 import { AppError } from "../errors";
 import { validate } from "../middleware/validate";
 import { addAuditEvent } from "../services/audit";
 import { createManagedToken, revokeManagedToken, rotateManagedSigningKey } from "../services/token";
-import { Environment } from "../types";
+import { Environment, PrincipalType } from "../types";
 import {
   activateSigningKeyParamsSchema,
   createSigningKeySchema,
@@ -15,6 +15,10 @@ import {
 
 function isEnvironment(value: string): value is Environment {
   return value === "dev" || value === "staging" || value === "prod";
+}
+
+function isPrincipalType(value: string): value is PrincipalType {
+  return value === "agent" || value === "service_account";
 }
 
 export const tokensRouter = Router();
@@ -31,13 +35,24 @@ tokensRouter.post("/tokens/mint", validate({ body: mintTokenSchema }), async (re
     throw new AppError(500, "INVALID_AGENT_ENV", "Agent has invalid environment");
   }
 
+  if (!isPrincipalType(agent.principalType)) {
+    throw new AppError(500, "INVALID_AGENT_PRINCIPAL", "Agent has invalid principal type");
+  }
+
   const iat = Math.floor(Date.now() / 1000);
+  const tenantConfig = await getTenantConfig(agent.tenantId);
+  const ttlFromConfig = tenantConfig?.tokenTtlSeconds;
+  const ttlSeconds = ttlFromConfig && ttlFromConfig >= TOKEN_TTL_MIN_SECONDS && ttlFromConfig <= TOKEN_TTL_MAX_SECONDS
+    ? ttlFromConfig
+    : TOKEN_TTL_SECONDS;
+
   const claims = {
     sub: agent.id,
     tenantId: agent.tenantId,
+    principalType: agent.principalType,
     env: agent.environment,
     iat,
-    exp: iat + TOKEN_TTL_SECONDS
+    exp: iat + ttlSeconds
   };
   const managed = await createManagedToken(claims);
 
@@ -48,12 +63,13 @@ tokensRouter.post("/tokens/mint", validate({ body: mintTokenSchema }), async (re
     status: "success",
     details: {
       expiresInSeconds: TOKEN_TTL_SECONDS,
+      configuredTtlSeconds: ttlSeconds,
       kid: managed.kid,
       jti: managed.jti
     }
   });
 
-  res.status(200).json({ token: managed.token, expiresInSeconds: TOKEN_TTL_SECONDS, kid: managed.kid, jti: managed.jti });
+  res.status(200).json({ token: managed.token, expiresInSeconds: ttlSeconds, kid: managed.kid, jti: managed.jti });
 });
 
 tokensRouter.post("/tokens/revoke", validate({ body: revokeTokenSchema }), async (req, res) => {

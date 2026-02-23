@@ -50,8 +50,15 @@ approvalsRouter.post(
       eventType: "approval.resolved",
       connector: approval.connector,
       action: approval.action,
-      status: body.decision === "approved" ? "success" : "failure",
-      details: { approvalId: approval.id, approverId: body.approverId, decision: body.decision }
+      status: approval.status === "approved" ? "success" : body.decision === "rejected" ? "failure" : "success",
+      details: {
+        approvalId: approval.id,
+        approverId: body.approverId,
+        decision: body.decision,
+        approvalStatus: approval.status,
+        requiredApprovals: approval.requiredApprovals,
+        approvedBy: approval.approvedBy
+      }
     });
 
     res.status(200).json({ approval });

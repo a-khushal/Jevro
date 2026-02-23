@@ -8,6 +8,8 @@ const envSchema = z.object({
   TOKEN_SECRET: z.string().min(16, "TOKEN_SECRET must be at least 16 characters"),
   TOKEN_DEFAULT_KID: z.string().min(1).default("local-dev-kid-1"),
   TOKEN_TTL_SECONDS: z.coerce.number().int().positive().default(600),
+  TOKEN_TTL_MIN_SECONDS: z.coerce.number().int().positive().default(60),
+  TOKEN_TTL_MAX_SECONDS: z.coerce.number().int().positive().default(86400),
   CORS_ORIGINS: z.string().default("http://localhost:3000,http://localhost:5173"),
   JSON_BODY_LIMIT: z.string().default("100kb"),
   RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().default(60000),
@@ -28,6 +30,11 @@ const envSchema = z.object({
   GITHUB_API_BASE_URL: z.string().url().default("https://api.github.com"),
   JIRA_API_BASE_URL: z.string().url().default("https://your-domain.atlassian.net"),
   SLACK_API_BASE_URL: z.string().url().default("https://slack.com/api"),
+  POSTGRES_CONNECTOR_URL: z.string().min(1).optional(),
+  POSTGRES_READONLY_MAX_ROWS: z.coerce.number().int().positive().default(100),
+  IDEMPOTENCY_TTL_SECONDS: z.coerce.number().int().positive().default(3600),
+  HIGH_RISK_REQUIRED_APPROVALS: z.coerce.number().int().positive().default(2),
+  RISK_REQUIRE_APPROVAL_LEVELS: z.string().default("high,critical"),
   SLACK_BOT_TOKEN: z.string().optional(),
   SLACK_SIGNING_SECRET: z.string().optional(),
   SLACK_APPROVAL_CHANNEL: z.string().optional(),
@@ -53,6 +60,8 @@ export const PORT = env.PORT;
 export const TOKEN_SECRET = env.TOKEN_SECRET;
 export const TOKEN_DEFAULT_KID = env.TOKEN_DEFAULT_KID;
 export const TOKEN_TTL_SECONDS = env.TOKEN_TTL_SECONDS;
+export const TOKEN_TTL_MIN_SECONDS = env.TOKEN_TTL_MIN_SECONDS;
+export const TOKEN_TTL_MAX_SECONDS = env.TOKEN_TTL_MAX_SECONDS;
 export const JSON_BODY_LIMIT = env.JSON_BODY_LIMIT;
 export const RATE_LIMIT_WINDOW_MS = env.RATE_LIMIT_WINDOW_MS;
 export const RATE_LIMIT_MAX_REQUESTS = env.RATE_LIMIT_MAX_REQUESTS;
@@ -72,6 +81,14 @@ export const CIRCUIT_BREAKER_OPEN_MS = env.CIRCUIT_BREAKER_OPEN_MS;
 export const GITHUB_API_BASE_URL = env.GITHUB_API_BASE_URL;
 export const JIRA_API_BASE_URL = env.JIRA_API_BASE_URL;
 export const SLACK_API_BASE_URL = env.SLACK_API_BASE_URL;
+export const POSTGRES_CONNECTOR_URL = env.POSTGRES_CONNECTOR_URL ?? env.DATABASE_URL;
+export const POSTGRES_READONLY_MAX_ROWS = env.POSTGRES_READONLY_MAX_ROWS;
+export const IDEMPOTENCY_TTL_SECONDS = env.IDEMPOTENCY_TTL_SECONDS;
+export const HIGH_RISK_REQUIRED_APPROVALS = env.HIGH_RISK_REQUIRED_APPROVALS;
+export const RISK_REQUIRE_APPROVAL_LEVELS = env.RISK_REQUIRE_APPROVAL_LEVELS
+  .split(",")
+  .map((value) => value.trim())
+  .filter(Boolean);
 export const CORS_ORIGINS = env.CORS_ORIGINS.split(",").map((value) => value.trim()).filter(Boolean);
 export const SLACK_BOT_TOKEN = env.SLACK_BOT_TOKEN;
 export const SLACK_SIGNING_SECRET = env.SLACK_SIGNING_SECRET;

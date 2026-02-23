@@ -11,6 +11,18 @@ paths:
       responses:
         "200":
           description: Healthy
+  /metrics:
+    get:
+      summary: Route-level metrics snapshot
+      responses:
+        "200":
+          description: Metrics snapshot
+  /metrics/summary:
+    get:
+      summary: Global metrics summary
+      responses:
+        "200":
+          description: Metrics summary
   /agents:
     get:
       summary: List agents for a tenant
@@ -38,6 +50,12 @@ paths:
       responses:
         "201":
           description: Agent created
+  /service-accounts:
+    post:
+      summary: Create service account machine principal
+      responses:
+        "201":
+          description: Service account created
   /agents/{agentId}:
     delete:
       summary: Soft-delete an agent
@@ -94,6 +112,18 @@ paths:
       responses:
         "201":
           description: Policy created
+  /policies/templates:
+    get:
+      summary: List reusable policy templates
+      responses:
+        "200":
+          description: Template list
+  /policies/simulate:
+    post:
+      summary: Simulate policy decision with optional proposed policy
+      responses:
+        "200":
+          description: Simulation result
   /tokens/mint:
     post:
       summary: Mint short-lived token
@@ -127,6 +157,32 @@ paths:
       responses:
         "200":
           description: Token revoked
+  /tenants/config:
+    get:
+      summary: Read tenant runtime config
+      parameters:
+        - in: query
+          name: tenantId
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Tenant config
+    post:
+      summary: Upsert tenant runtime config
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [tenantId]
+              properties:
+                tenantId: { type: string }
+                tokenTtlSeconds: { type: integer }
+      responses:
+        "200":
+          description: Tenant config upserted
   /tokens/keys:
     get:
       summary: List signing key metadata

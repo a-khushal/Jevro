@@ -68,4 +68,5 @@ test("data retention purges old audit, approvals, and revoked tokens", async (t)
   assert.equal(result.deletedAuditEvents, 1);
   assert.equal(result.deletedApprovals, 1);
   assert.equal(result.deletedRevokedTokens, 1);
+  assert.equal(result.deletedIdempotencyRecords, 0);
 });

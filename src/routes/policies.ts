@@ -10,17 +10,25 @@ import {
 import { AppError } from "../errors";
 import { validate } from "../middleware/validate";
 import { addAuditEvent } from "../services/audit";
+import { authorizeDetailed } from "../services/authorize";
 import { isConnectorActionSupported, isSupportedConnector } from "../services/connectors";
+import { getPolicyTemplateById, listPolicyTemplates } from "../services/policyTemplates";
 import { Effect, Environment } from "../types";
 import {
   createPolicySchema,
   deletePolicySchema,
   listPoliciesQuerySchema,
   policyParamsSchema,
+  simulatePolicySchema,
   updatePolicySchema
 } from "../validation/schemas";
 
 export const policiesRouter = Router();
+
+policiesRouter.get("/policies/templates", (_req, res) => {
+  const templates = listPolicyTemplates();
+  res.status(200).json({ count: templates.length, templates });
+});
 
 policiesRouter.get("/policies", validate({ query: listPoliciesQuerySchema }), async (req, res) => {
   const tenantId = req.query.tenantId as string;
@@ -29,7 +37,12 @@ policiesRouter.get("/policies", validate({ query: listPoliciesQuerySchema }), as
   const result = await listPolicies({ tenantId, agentId });
   res.status(200).json({
     count: result.length,
-    policies: result.map((policy) => ({ ...policy, createdAt: policy.createdAt.toISOString() }))
+    policies: result.map((policy) => ({
+      ...policy,
+      createdAt: policy.createdAt.toISOString(),
+      updatedAt: policy.updatedAt.toISOString(),
+      deletedAt: policy.deletedAt ? policy.deletedAt.toISOString() : null
+    }))
   });
 });
 
@@ -41,15 +54,30 @@ policiesRouter.post("/policies", validate({ body: createPolicySchema }), async (
     actions: string[];
     environment: Environment;
     effect: Effect;
+    priority?: number;
+    dryRun?: boolean;
+    templateId?: string;
   };
 
-  if (!isSupportedConnector(body.connector)) {
+  const template = body.templateId ? getPolicyTemplateById(body.templateId) : null;
+  if (body.templateId && !template) {
+    throw new AppError(404, "POLICY_TEMPLATE_NOT_FOUND", "Policy template not found");
+  }
+
+  const connector = template?.connector ?? body.connector;
+  const actions = template?.actions ?? body.actions;
+  const environment = template?.environment ?? body.environment;
+  const effect = template?.effect ?? body.effect;
+  const priority = body.priority ?? template?.priority ?? 100;
+  const dryRun = body.dryRun ?? template?.dryRun ?? false;
+
+  if (!isSupportedConnector(connector)) {
     throw new AppError(400, "UNSUPPORTED_CONNECTOR", "Unsupported connector");
   }
 
-  const unsupportedAction = body.actions.find((action) => !isConnectorActionSupported(body.connector, action));
+  const unsupportedAction = actions.find((action) => !isConnectorActionSupported(connector, action));
   if (unsupportedAction) {
-    throw new AppError(400, "UNSUPPORTED_CONNECTOR_ACTION", `Unsupported action for ${body.connector}: ${unsupportedAction}`);
+    throw new AppError(400, "UNSUPPORTED_CONNECTOR_ACTION", `Unsupported action for ${connector}: ${unsupportedAction}`);
   }
 
   const agent = await getAgentByTenantAndId({ tenantId: body.tenantId, agentId: body.agentId });
@@ -58,29 +86,42 @@ policiesRouter.post("/policies", validate({ body: createPolicySchema }), async (
     return;
   }
 
-  if (agent.environment !== body.environment) {
+  if (agent.environment !== environment) {
     throw new AppError(400, "AGENT_ENVIRONMENT_MISMATCH", "Policy environment must match agent environment");
   }
 
   const policy = await createPolicy({
     tenantId: body.tenantId,
     agentId: body.agentId,
-    connector: body.connector,
-    actions: body.actions,
-    environment: body.environment,
-    effect: body.effect
+    connector,
+    actions,
+    environment,
+    effect,
+    priority,
+    dryRun,
+    templateId: body.templateId
   });
 
   await addAuditEvent({
     tenantId: body.tenantId,
     agentId: body.agentId,
     eventType: "policy.created",
-    connector: body.connector,
+    connector,
     status: "success",
-    details: { actions: body.actions, effect: body.effect }
+    details: {
+      actions,
+      effect,
+      priority,
+      dryRun,
+      templateId: body.templateId ?? null
+    }
   });
 
-  res.status(201).json({ ...policy, createdAt: policy.createdAt.toISOString() });
+  res.status(201).json({
+    ...policy,
+    createdAt: policy.createdAt.toISOString(),
+    updatedAt: policy.updatedAt.toISOString()
+  });
 });
 
 policiesRouter.patch(
@@ -94,6 +135,8 @@ policiesRouter.patch(
       actions?: string[];
       environment?: Environment;
       effect?: Effect;
+      priority?: number;
+      dryRun?: boolean;
     };
 
     const existing = await getPolicyByTenantAndId({ tenantId: body.tenantId, policyId });
@@ -105,6 +148,8 @@ policiesRouter.patch(
     const nextActions = body.actions ?? existing.actions;
     const nextEnvironment = body.environment ?? (existing.environment as Environment);
     const nextEffect = body.effect ?? (existing.effect as Effect);
+    const nextPriority = body.priority ?? existing.priority;
+    const nextDryRun = body.dryRun ?? existing.dryRun;
 
     if (!isSupportedConnector(nextConnector)) {
       throw new AppError(400, "UNSUPPORTED_CONNECTOR", "Unsupported connector");
@@ -130,7 +175,9 @@ policiesRouter.patch(
       connector: nextConnector,
       actions: nextActions,
       environment: nextEnvironment,
-      effect: nextEffect
+      effect: nextEffect,
+      priority: nextPriority,
+      dryRun: nextDryRun
     });
 
     if (!updated) {
@@ -147,7 +194,9 @@ policiesRouter.patch(
         policyId: updated.id,
         actions: updated.actions,
         effect: updated.effect,
-        environment: updated.environment
+        environment: updated.environment,
+        priority: updated.priority,
+        dryRun: updated.dryRun
       }
     });
 
@@ -158,6 +207,64 @@ policiesRouter.patch(
     });
   }
 );
+
+policiesRouter.post("/policies/simulate", validate({ body: simulatePolicySchema }), async (req, res) => {
+  const body = req.body as {
+    tenantId: string;
+    agentId: string;
+    connector: string;
+    action: string;
+    environment: Environment;
+    proposedPolicy?: {
+      connector: string;
+      actions: string[];
+      effect: Effect;
+      environment: Environment;
+      priority?: number;
+      dryRun?: boolean;
+    };
+  };
+
+  const current = await authorizeDetailed({
+    tenantId: body.tenantId,
+    agentId: body.agentId,
+    connector: body.connector,
+    action: body.action,
+    environment: body.environment
+  });
+
+  let simulated = current;
+
+  if (body.proposedPolicy) {
+    if (!isSupportedConnector(body.proposedPolicy.connector)) {
+      throw new AppError(400, "UNSUPPORTED_CONNECTOR", "Unsupported connector");
+    }
+
+    if (!body.proposedPolicy.actions.includes(body.action)) {
+      throw new AppError(400, "SIMULATION_ACTION_MISMATCH", "proposed policy must include simulated action");
+    }
+
+    if (body.proposedPolicy.environment !== body.environment) {
+      throw new AppError(400, "SIMULATION_ENVIRONMENT_MISMATCH", "proposed policy environment must match simulation environment");
+    }
+
+    const simulatedDecision = body.proposedPolicy.dryRun
+      ? current.decision
+      : body.proposedPolicy.effect;
+
+    simulated = {
+      ...current,
+      decision: simulatedDecision,
+      baseDecision: simulatedDecision,
+      shadowDecision: body.proposedPolicy.dryRun ? body.proposedPolicy.effect : current.shadowDecision
+    };
+  }
+
+  res.status(200).json({
+    current,
+    simulated
+  });
+});
 
 policiesRouter.delete(
   "/policies/:policyId",

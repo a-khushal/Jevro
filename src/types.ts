@@ -1,6 +1,8 @@
 export type Environment = "dev" | "staging" | "prod";
 export type Effect = "allow" | "deny" | "require_approval";
 export type ApprovalStatus = "pending" | "approved" | "rejected" | "consumed" | "expired";
+export type PrincipalType = "agent" | "service_account";
+export type RiskLevel = "low" | "medium" | "high" | "critical";
 
 export interface AuditEvent {
   id: string;
@@ -17,6 +19,7 @@ export interface AuditEvent {
 export interface TokenClaims {
   sub: string;
   tenantId: string;
+  principalType?: PrincipalType;
   env: Environment;
   jti: string;
   iat: number;
@@ -38,6 +41,9 @@ export interface ApprovalRequest {
   connector: string;
   action: string;
   status: ApprovalStatus;
+  requiredApprovals: number;
+  approvedBy: string[];
+  riskLevel: RiskLevel;
   requestedAt: string;
   expiresAt: string;
   resolvedAt?: string;

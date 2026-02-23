@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { getMetricsSnapshot, getMetricsSummary } from "../services/metrics";
 import { getSecuritySignalSnapshot } from "../services/securityAlerts";
 import { nowIso } from "../utils/time";
 
@@ -11,4 +12,12 @@ healthRouter.get("/health", (_req, res) => {
     timestamp: nowIso(),
     securitySignals: getSecuritySignalSnapshot()
   });
+});
+
+healthRouter.get("/metrics", (_req, res) => {
+  res.status(200).json(getMetricsSnapshot());
+});
+
+healthRouter.get("/metrics/summary", (_req, res) => {
+  res.status(200).json(getMetricsSummary());
 });

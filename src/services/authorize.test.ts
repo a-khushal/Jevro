@@ -30,3 +30,19 @@ test("policy decision defaults to deny when no policies", () => {
   const decision = authorizeService.evaluatePolicyDecision([]);
   assert.equal(decision, "deny");
 });
+
+test("policy decision uses highest-priority policy before effect precedence", () => {
+  const decision = authorizeService.evaluatePolicyDecision([
+    { effect: "deny", priority: 100 },
+    { effect: "allow", priority: 10 }
+  ]);
+  assert.equal(decision, "allow");
+});
+
+test("dry-run policies are excluded from enforced decision", () => {
+  const decision = authorizeService.evaluatePolicyDecision([
+    { effect: "deny", priority: 1, dryRun: true },
+    { effect: "allow", priority: 100, dryRun: false }
+  ]);
+  assert.equal(decision, "allow");
+});

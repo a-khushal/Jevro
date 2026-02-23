@@ -3,10 +3,12 @@ import {
   createApproval,
   expireApproval,
   getApprovalById,
+  getPendingApprovalById,
   listExpiredPendingApprovals,
-  resolveApproval as resolveApprovalRecord
+  updateApprovalById
 } from "../db";
-import { ApprovalRequest, ApprovalStatus } from "../types";
+import { getRequiredApprovalsForRisk, getRiskLevel } from "./risk";
+import { ApprovalRequest, ApprovalStatus, RiskLevel } from "../types";
 
 const APPROVAL_TTL_MINUTES = 10;
 
@@ -21,6 +23,9 @@ function toApprovalRequest(record: {
   connector: string;
   action: string;
   status: string;
+  requiredApprovals: number;
+  approvedBy: string[];
+  riskLevel: string;
   requestedAt: Date;
   expiresAt: Date;
   resolvedAt: Date | null;
@@ -33,6 +38,9 @@ function toApprovalRequest(record: {
     connector: record.connector,
     action: record.action,
     status: record.status as ApprovalStatus,
+    requiredApprovals: record.requiredApprovals,
+    approvedBy: record.approvedBy,
+    riskLevel: record.riskLevel as RiskLevel,
     requestedAt: record.requestedAt.toISOString(),
     expiresAt: record.expiresAt.toISOString(),
     resolvedAt: record.resolvedAt ? record.resolvedAt.toISOString() : undefined,
@@ -73,11 +81,16 @@ export async function createApprovalRequest(input: {
   connector: string;
   action: string;
 }): Promise<ApprovalRequest> {
+  const riskLevel = getRiskLevel(input.connector, input.action);
+  const requiredApprovals = getRequiredApprovalsForRisk(riskLevel);
+
   const created = await createApproval({
     tenantId: input.tenantId,
     agentId: input.agentId,
     connector: input.connector,
     action: input.action,
+    requiredApprovals,
+    riskLevel,
     requestedAt: new Date(),
     expiresAt: getExpiryDate()
   });
@@ -91,7 +104,43 @@ export async function resolveApproval(input: {
   approverId: string;
   status: Extract<ApprovalStatus, "approved" | "rejected">;
 }): Promise<ApprovalRequest | null> {
-  const updated = await resolveApprovalRecord(input);
+  const pending = await getPendingApprovalById({ approvalId: input.approvalId, tenantId: input.tenantId });
+  if (!pending) {
+    return null;
+  }
+
+  if (input.status === "rejected") {
+    const rejected = await updateApprovalById({
+      approvalId: input.approvalId,
+      tenantId: input.tenantId,
+      status: "rejected",
+      approvedBy: pending.approvedBy,
+      resolvedBy: input.approverId,
+      resolvedAt: new Date()
+    });
+
+    if (rejected.count === 0) {
+      return null;
+    }
+
+    const approval = await getApprovalById(input.approvalId);
+    return approval ? toApprovalRequest(approval) : null;
+  }
+
+  const approvedBySet = new Set(pending.approvedBy);
+  approvedBySet.add(input.approverId);
+  const approvedBy = [...approvedBySet];
+  const reachedThreshold = approvedBy.length >= pending.requiredApprovals;
+
+  const updated = await updateApprovalById({
+    approvalId: input.approvalId,
+    tenantId: input.tenantId,
+    status: reachedThreshold ? "approved" : "pending",
+    approvedBy,
+    resolvedBy: reachedThreshold ? input.approverId : null,
+    resolvedAt: reachedThreshold ? new Date() : null
+  });
+
   if (updated.count === 0) {
     return null;
   }

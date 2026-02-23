@@ -54,3 +54,29 @@ test("revoked token is blocked on proxy", async (t) => {
   assert.equal(proxy.status, 401);
   assert.equal(proxy.body.code, "INVALID_TOKEN_REVOKED");
 });
+
+test("tenant token ttl override changes minted expiry", async (t) => {
+  if (!(await ensureDatabaseReady())) {
+    t.skip("Database not available for token security test");
+    return;
+  }
+
+  await resetDatabase();
+
+  const createAgent = await request.post("/v1/agents").send({
+    tenantId: "acme",
+    name: "ttl-agent",
+    environment: "prod"
+  });
+  const agentId = createAgent.body.id as string;
+
+  const setConfig = await request.post("/v1/tenants/config").send({
+    tenantId: "acme",
+    tokenTtlSeconds: 1200
+  });
+  assert.equal(setConfig.status, 200);
+
+  const mintToken = await request.post("/v1/tokens/mint").send({ tenantId: "acme", agentId });
+  assert.equal(mintToken.status, 200);
+  assert.equal(mintToken.body.expiresInSeconds, 1200);
+});

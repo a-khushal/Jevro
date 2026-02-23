@@ -2,11 +2,13 @@ import { z } from "zod";
 
 const environmentSchema = z.enum(["dev", "staging", "prod"]);
 const effectSchema = z.enum(["allow", "deny", "require_approval"]);
+const principalTypeSchema = z.enum(["agent", "service_account"]);
 const approvalStatusSchema = z.enum(["pending", "approved", "rejected", "consumed", "expired"]);
 
 export const createAgentSchema = z.object({
   tenantId: z.string().min(1),
   name: z.string().min(1),
+  principalType: principalTypeSchema.optional(),
   environment: environmentSchema.optional()
 });
 
@@ -28,7 +30,10 @@ export const createPolicySchema = z.object({
   connector: z.string().min(1),
   actions: z.array(z.string().min(1)).min(1),
   environment: environmentSchema,
-  effect: effectSchema
+  effect: effectSchema,
+  priority: z.number().int().min(1).max(1000).optional(),
+  dryRun: z.boolean().optional(),
+  templateId: z.string().min(1).optional()
 });
 
 export const policyParamsSchema = z.object({
@@ -41,18 +46,40 @@ export const updatePolicySchema = z
     connector: z.string().min(1).optional(),
     actions: z.array(z.string().min(1)).min(1).optional(),
     environment: environmentSchema.optional(),
-    effect: effectSchema.optional()
+    effect: effectSchema.optional(),
+    priority: z.number().int().min(1).max(1000).optional(),
+    dryRun: z.boolean().optional()
   })
   .refine(
     (value) =>
       value.connector !== undefined ||
       value.actions !== undefined ||
       value.environment !== undefined ||
-      value.effect !== undefined,
+      value.effect !== undefined ||
+      value.priority !== undefined ||
+      value.dryRun !== undefined,
     {
       message: "At least one field must be provided for update"
     }
   );
+
+export const simulatePolicySchema = z.object({
+  tenantId: z.string().min(1),
+  agentId: z.string().min(1),
+  connector: z.string().min(1),
+  action: z.string().min(1),
+  environment: environmentSchema,
+  proposedPolicy: z
+    .object({
+      connector: z.string().min(1),
+      actions: z.array(z.string().min(1)).min(1),
+      effect: effectSchema,
+      environment: environmentSchema,
+      priority: z.number().int().min(1).max(1000).optional(),
+      dryRun: z.boolean().optional()
+    })
+    .optional()
+});
 
 export const deletePolicySchema = z.object({
   tenantId: z.string().min(1)
@@ -66,6 +93,15 @@ export const listPoliciesQuerySchema = z.object({
 export const mintTokenSchema = z.object({
   tenantId: z.string().min(1),
   agentId: z.string().min(1)
+});
+
+export const tenantConfigSchema = z.object({
+  tenantId: z.string().min(1),
+  tokenTtlSeconds: z.number().int().positive().optional()
+});
+
+export const tenantConfigQuerySchema = z.object({
+  tenantId: z.string().min(1)
 });
 
 export const revokeTokenSchema = z.object({

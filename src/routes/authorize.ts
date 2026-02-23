@@ -3,7 +3,7 @@ import { getAgentByTenantAndId } from "../db";
 import { AppError } from "../errors";
 import { validate } from "../middleware/validate";
 import { addAuditEvent } from "../services/audit";
-import { authorize } from "../services/authorize";
+import { authorizeDetailed } from "../services/authorize";
 import { AuthorizeInput } from "../types";
 import { authorizeSchema } from "../validation/schemas";
 
@@ -21,16 +21,27 @@ authorizeRouter.post("/authorize", validate({ body: authorizeSchema }), async (r
     throw new AppError(403, "AGENT_ENVIRONMENT_MISMATCH", "Agent cannot authorize against a different environment");
   }
 
-  const decision = await authorize(body);
+  const detailed = await authorizeDetailed(body);
   await addAuditEvent({
     tenantId: body.tenantId,
     agentId: body.agentId,
     eventType: "policy.evaluated",
     connector: body.connector,
     action: body.action,
-    status: decision === "deny" ? "failure" : "success",
-    details: { decision, environment: body.environment }
+    status: detailed.decision === "deny" ? "failure" : "success",
+    details: {
+      decision: detailed.decision,
+      baseDecision: detailed.baseDecision,
+      shadowDecision: detailed.shadowDecision,
+      riskLevel: detailed.riskLevel,
+      environment: body.environment
+    }
   });
 
-  res.status(200).json({ decision });
+  res.status(200).json({
+    decision: detailed.decision,
+    baseDecision: detailed.baseDecision,
+    shadowDecision: detailed.shadowDecision,
+    riskLevel: detailed.riskLevel
+  });
 });

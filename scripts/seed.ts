@@ -20,6 +20,7 @@ async function ensureAgent(input: { tenantId: string; name: string; environment:
     data: {
       tenantId: input.tenantId,
       name: input.name,
+      principalType: "agent",
       environment: input.environment
     }
   });
@@ -52,7 +53,11 @@ async function ensurePolicy(input: {
   }
 
   return prisma.policy.create({
-    data: input
+    data: {
+      ...input,
+      priority: 100,
+      dryRun: false
+    }
   });
 }
 

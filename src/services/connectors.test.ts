@@ -14,3 +14,9 @@ test("supported connectors include slack and github", () => {
 test("unsupported connector returns false", () => {
   assert.equal(connectorsService.isSupportedConnector("not-a-connector"), false);
 });
+
+test("write action classifier flags mutating operations", () => {
+  assert.equal(connectorsService.isWriteConnectorAction("github", "comment_pr"), true);
+  assert.equal(connectorsService.isWriteConnectorAction("jira", "transition_issue"), true);
+  assert.equal(connectorsService.isWriteConnectorAction("github", "read_pr"), false);
+});

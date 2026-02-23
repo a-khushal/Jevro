@@ -3,8 +3,9 @@ import { AppError } from "../errors";
 import { validate } from "../middleware/validate";
 import { addAuditEvent } from "../services/audit";
 import { consumeApproval, createApprovalRequest, getUsableApproval } from "../services/approvals";
-import { authorize } from "../services/authorize";
-import { executeConnectorAction, isSupportedConnector } from "../services/connectors";
+import { authorizeDetailed } from "../services/authorize";
+import { executeConnectorAction, isSupportedConnector, isWriteConnectorAction } from "../services/connectors";
+import { getIdempotentResponse, saveIdempotentResponse } from "../services/idempotency";
 import { recordSecuritySignal } from "../services/securityAlerts";
 import { sendSlackApprovalRequest } from "../services/slack";
 import { isManagedTokenRevoked, parseBearerToken, verifyManagedToken } from "../services/token";
@@ -63,6 +64,30 @@ proxyRouter.post<{ connector: string; action: string }>(
       approvalId?: string;
     };
 
+    const idempotencyKey = req.header("idempotency-key")?.trim();
+    const isWriteAction = isWriteConnectorAction(req.params.connector, req.params.action);
+
+    if (idempotencyKey && isWriteAction) {
+      const replay = await getIdempotentResponse({
+        tenantId: claims.tenantId,
+        agentId: claims.sub,
+        connector: req.params.connector,
+        action: req.params.action,
+        idempotencyKey,
+        requestBody: {
+          payload: body.payload ?? {},
+          environment: body.environment ?? claims.env,
+          approvalId: body.approvalId ?? null
+        }
+      });
+
+      if (replay) {
+        res.setHeader("x-idempotent-replay", "true");
+        res.status(replay.status).json({ ...replay.body, idempotentReplay: true });
+        return;
+      }
+    }
+
     if (body.environment && body.environment !== claims.env) {
       await recordSecuritySignal({
         signal: "policy_bypass_attempt",
@@ -73,13 +98,14 @@ proxyRouter.post<{ connector: string; action: string }>(
     }
 
     const environment = body.environment ?? claims.env;
-    const decision = await authorize({
+    const auth = await authorizeDetailed({
       tenantId: claims.tenantId,
       agentId: claims.sub,
       connector: req.params.connector,
       action: req.params.action,
       environment
     });
+    const decision = auth.decision;
 
     if (decision === "deny") {
       await addAuditEvent({
@@ -91,7 +117,7 @@ proxyRouter.post<{ connector: string; action: string }>(
         status: "failure",
         details: { decision }
       });
-      res.status(403).json({ decision, error: "Request denied by policy" });
+      res.status(403).json({ decision, riskLevel: auth.riskLevel, error: "Request denied by policy" });
       return;
     }
 
@@ -153,7 +179,36 @@ proxyRouter.post<{ connector: string; action: string }>(
             details: { decision: "allow_via_approval" }
           });
 
-          res.status(200).json({ decision: "allow", providerResponse });
+          const responseBody = {
+            decision: "allow",
+            baseDecision: auth.baseDecision,
+            shadowDecision: auth.shadowDecision,
+            riskLevel: auth.riskLevel,
+            providerResponse
+          };
+
+          if (idempotencyKey && isWriteAction) {
+            await saveIdempotentResponse(
+              {
+                tenantId: claims.tenantId,
+                agentId: claims.sub,
+                connector: req.params.connector,
+                action: req.params.action,
+                idempotencyKey,
+                requestBody: {
+                  payload: body.payload ?? {},
+                  environment,
+                  approvalId: body.approvalId ?? null
+                }
+              },
+              {
+                status: 200,
+                body: responseBody
+              }
+            );
+          }
+
+          res.status(200).json(responseBody);
           return;
         }
 
@@ -186,7 +241,14 @@ proxyRouter.post<{ connector: string; action: string }>(
         connector: req.params.connector,
         action: req.params.action,
         status: "success",
-        details: { decision, approvalId: approval.id, approvalChannel: "slack", approvalStatus: "pending" }
+        details: {
+          decision,
+          approvalId: approval.id,
+          approvalChannel: "slack",
+          approvalStatus: "pending",
+          requiredApprovals: approval.requiredApprovals,
+          riskLevel: approval.riskLevel
+        }
       });
 
       await addAuditEvent({
@@ -247,6 +309,35 @@ proxyRouter.post<{ connector: string; action: string }>(
       details: { decision: "allow" }
     });
 
-    res.status(200).json({ decision, providerResponse });
+    const responseBody = {
+      decision,
+      baseDecision: auth.baseDecision,
+      shadowDecision: auth.shadowDecision,
+      riskLevel: auth.riskLevel,
+      providerResponse
+    };
+
+    if (idempotencyKey && isWriteAction) {
+      await saveIdempotentResponse(
+        {
+          tenantId: claims.tenantId,
+          agentId: claims.sub,
+          connector: req.params.connector,
+          action: req.params.action,
+          idempotencyKey,
+          requestBody: {
+            payload: body.payload ?? {},
+            environment,
+            approvalId: body.approvalId ?? null
+          }
+        },
+        {
+          status: 200,
+          body: responseBody
+        }
+      );
+    }
+
+    res.status(200).json(responseBody);
   }
 );

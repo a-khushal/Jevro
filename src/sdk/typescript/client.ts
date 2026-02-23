@@ -5,6 +5,8 @@ export type ApprovalDecision = "approved" | "rejected";
 export type MintTokenResponse = {
   token: string;
   expiresInSeconds: number;
+  kid?: string;
+  jti?: string;
 };
 
 export type ProxyResult = {

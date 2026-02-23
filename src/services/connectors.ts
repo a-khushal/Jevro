@@ -6,27 +6,49 @@ import {
   CONNECTOR_TIMEOUT_MS,
   GITHUB_API_BASE_URL,
   JIRA_API_BASE_URL,
+  POSTGRES_CONNECTOR_URL,
+  POSTGRES_READONLY_MAX_ROWS,
   SLACK_API_BASE_URL
 } from "../config";
 import { getConnectorCredential } from "../db";
 import { AppError } from "../errors";
 import { nowIso } from "../utils/time";
+import { Pool } from "pg";
 
 const SUPPORTED_CONNECTORS = new Set(["slack", "github", "jira", "postgres"]);
 const ACTIONS_BY_CONNECTOR: Record<string, Set<string>> = {
-  github: new Set(["read_pr", "comment_pr"]),
+  github: new Set(["read_pr", "comment_pr", "merge_pr"]),
   slack: new Set(["post_message", "read_channel", "lookup_user"]),
-  jira: new Set(["read_issue"]),
+  jira: new Set(["read_issue", "transition_issue"]),
   postgres: new Set(["query_readonly"])
 };
 
 const REQUIRED_SCOPES_BY_ACTION: Record<string, string[]> = {
   "github:read_pr": ["repo", "public_repo", "pull_request:read"],
   "github:comment_pr": ["repo", "public_repo", "issues:write"],
+  "github:merge_pr": ["repo", "public_repo", "pull_request:write"],
   "slack:post_message": ["chat:write"],
   "slack:read_channel": ["channels:read", "groups:read"],
-  "slack:lookup_user": ["users:read"]
+  "slack:lookup_user": ["users:read"],
+  "jira:transition_issue": ["write:jira-work"]
 };
+
+const WRITE_ACTIONS = new Set([
+  "github:comment_pr",
+  "github:merge_pr",
+  "slack:post_message",
+  "jira:transition_issue"
+]);
+
+let postgresPool: Pool | null = null;
+
+function getPostgresPool(): Pool {
+  if (!postgresPool) {
+    postgresPool = new Pool({ connectionString: POSTGRES_CONNECTOR_URL });
+  }
+
+  return postgresPool;
+}
 
 type ConnectorExecutionInput = {
   tenantId: string;
@@ -149,7 +171,7 @@ function assertActionScopes(input: { connector: string; action: string; grantedS
 function getGithubActionRequest(input: {
   action: string;
   payload: Record<string, unknown>;
-}): { method: "GET" | "POST"; path: string; body?: Record<string, unknown> } {
+}): { method: "GET" | "POST" | "PUT"; path: string; body?: Record<string, unknown> } {
   if (input.action === "read_pr") {
     const owner = getPayloadValue<string>(input.payload, "owner");
     const repo = getPayloadValue<string>(input.payload, "repo");
@@ -179,6 +201,25 @@ function getGithubActionRequest(input: {
       method: "POST",
       path: `/repos/${owner}/${repo}/issues/${issueNumber}/comments`,
       body: { body }
+    };
+  }
+
+  if (input.action === "merge_pr") {
+    const owner = getPayloadValue<string>(input.payload, "owner");
+    const repo = getPayloadValue<string>(input.payload, "repo");
+    const pullNumber = getPayloadValue<number>(input.payload, "pull_number");
+    const mergeMethod = getPayloadValue<string>(input.payload, "merge_method") ?? "merge";
+
+    if (!owner || !repo || typeof pullNumber !== "number") {
+      throw new AppError(400, "GITHUB_PAYLOAD_INVALID", "merge_pr requires owner, repo, pull_number");
+    }
+
+    return {
+      method: "PUT",
+      path: `/repos/${owner}/${repo}/pulls/${pullNumber}/merge`,
+      body: {
+        merge_method: mergeMethod
+      }
     };
   }
 
@@ -236,7 +277,7 @@ function getSlackActionRequest(input: {
 function getJiraActionRequest(input: {
   action: string;
   payload: Record<string, unknown>;
-}): { method: "GET"; path: string } {
+}): { method: "GET" | "POST"; path: string; body?: Record<string, unknown> } {
   if (input.action === "read_issue") {
     const issueKey = getPayloadValue<string>(input.payload, "issue_key");
     if (!issueKey) {
@@ -249,7 +290,57 @@ function getJiraActionRequest(input: {
     };
   }
 
+  if (input.action === "transition_issue") {
+    const issueKey = getPayloadValue<string>(input.payload, "issue_key");
+    const transitionId = getPayloadValue<string>(input.payload, "transition_id");
+    if (!issueKey || !transitionId) {
+      throw new AppError(400, "JIRA_PAYLOAD_INVALID", "transition_issue requires issue_key and transition_id");
+    }
+
+    return {
+      method: "POST",
+      path: `/rest/api/3/issue/${encodeURIComponent(issueKey)}/transitions`,
+      body: {
+        transition: {
+          id: transitionId
+        }
+      }
+    };
+  }
+
   throw new AppError(400, "JIRA_ACTION_UNSUPPORTED", `Unsupported Jira action: ${input.action}`);
+}
+
+function getPostgresReadonlyRequest(input: {
+  tenantId: string;
+  payload: Record<string, unknown>;
+}): { sql: string; values: unknown[] } {
+  const queryId = getPayloadValue<string>(input.payload, "query_id");
+  const params = (getPayloadValue<Record<string, unknown>>(input.payload, "params") ?? {}) as Record<string, unknown>;
+
+  if (!queryId) {
+    throw new AppError(400, "POSTGRES_PAYLOAD_INVALID", "query_readonly requires query_id");
+  }
+
+  if (queryId === "list_recent_audit_events") {
+    const limitRaw = Number(params.limit ?? 20);
+    const limit = Number.isFinite(limitRaw) ? Math.max(1, Math.min(limitRaw, POSTGRES_READONLY_MAX_ROWS)) : 20;
+    return {
+      sql: 'SELECT "id", "eventType", "status", "timestamp" FROM "AuditEvent" WHERE "tenantId" = $1 ORDER BY "timestamp" DESC LIMIT $2',
+      values: [input.tenantId, limit]
+    };
+  }
+
+  if (queryId === "list_pending_approvals") {
+    const limitRaw = Number(params.limit ?? 20);
+    const limit = Number.isFinite(limitRaw) ? Math.max(1, Math.min(limitRaw, POSTGRES_READONLY_MAX_ROWS)) : 20;
+    return {
+      sql: 'SELECT "id", "connector", "action", "status", "requestedAt" FROM "ApprovalRequest" WHERE "tenantId" = $1 AND "status" = $2 ORDER BY "requestedAt" DESC LIMIT $3',
+      values: [input.tenantId, "pending", limit]
+    };
+  }
+
+  throw new AppError(400, "POSTGRES_QUERY_NOT_ALLOWED", `Unsupported query_id: ${queryId}`);
 }
 
 async function executeGithubAction(input: ConnectorExecutionInput): Promise<Record<string, unknown>> {
@@ -426,8 +517,10 @@ async function executeJiraAction(input: ConnectorExecutionInput): Promise<Record
         method: request.method,
         headers: {
           authorization: `Bearer ${credential.token}`,
-          accept: "application/json"
+          accept: "application/json",
+          "content-type": "application/json"
         },
+        body: request.body ? JSON.stringify(request.body) : undefined,
         signal: controller.signal
       });
 
@@ -463,6 +556,27 @@ async function executeJiraAction(input: ConnectorExecutionInput): Promise<Record
   throw lastError instanceof Error ? lastError : new Error("Jira connector failed");
 }
 
+async function executePostgresReadonlyAction(input: ConnectorExecutionInput): Promise<Record<string, unknown>> {
+  if (input.action !== "query_readonly") {
+    throw new AppError(400, "POSTGRES_ACTION_UNSUPPORTED", `Unsupported Postgres action: ${input.action}`);
+  }
+
+  const request = getPostgresReadonlyRequest({ tenantId: input.tenantId, payload: input.payload });
+  const pool = getPostgresPool();
+  const result = await pool.query(request.sql, request.values);
+
+  return {
+    connector: input.connector,
+    action: input.action,
+    executedAt: nowIso(),
+    result: "success",
+    postgres: {
+      rowCount: result.rowCount
+    },
+    data: result.rows
+  };
+}
+
 export function isSupportedConnector(connector: string): boolean {
   return SUPPORTED_CONNECTORS.has(connector);
 }
@@ -474,6 +588,10 @@ export function isConnectorActionSupported(connector: string, action: string): b
 
 export function getSupportedActionsForConnector(connector: string): string[] {
   return [...(ACTIONS_BY_CONNECTOR[connector] ?? new Set<string>())];
+}
+
+export function isWriteConnectorAction(connector: string, action: string): boolean {
+  return WRITE_ACTIONS.has(`${connector}:${action}`);
 }
 
 function getRequiredScopesForConnector(connector: string): Record<string, string[]> {
@@ -532,6 +650,8 @@ export async function executeConnectorAction(input: ConnectorExecutionInput): Pr
       result = await executeSlackAction(input);
     } else if (input.connector === "jira") {
       result = await executeJiraAction(input);
+    } else if (input.connector === "postgres") {
+      result = await executePostgresReadonlyAction(input);
     } else {
       result = {
         connector: input.connector,
